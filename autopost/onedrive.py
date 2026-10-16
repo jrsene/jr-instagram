@@ -4,8 +4,8 @@ Não baixa os originais pesados: guarda uma cópia de 1800px (versão reduzida g
 que já serve para posts e stories. Vídeos só são baixados quando forem escolhidos para um reel.
 
 Login uma única vez:  python -m autopost onedrive-login
-Variáveis: ONEDRIVE_CLIENT_ID, ONEDRIVE_REFRESH_TOKEN e ONEDRIVE_KEY (para guardar o token renovado
-criptografado em data/onedrive_token.enc, já que o repositório é público).
+No GitHub: rode o workflow 'conectar-onedrive'. Só precisa do segredo ONEDRIVE_CLIENT_ID; o token fica
+criptografado em data/onedrive_token.enc (dentro do state.enc), nunca em texto aberto.
 """
 import json
 import os
@@ -29,8 +29,12 @@ def _token_file():
     return library.ROOT / "data" / "onedrive_token.enc"
 
 
+def _fernet_key():
+    return os.environ.get("ONEDRIVE_KEY") or os.environ.get("STATE_KEY")
+
+
 def _stored_refresh():
-    key = os.environ.get("ONEDRIVE_KEY")
+    key = _fernet_key()
     f = _token_file()
     if key and f.exists():
         from cryptography.fernet import Fernet
@@ -39,7 +43,7 @@ def _stored_refresh():
 
 
 def _save_refresh(tok):
-    key = os.environ.get("ONEDRIVE_KEY")
+    key = _fernet_key()
     if key:
         from cryptography.fernet import Fernet
         _token_file().parent.mkdir(exist_ok=True)
@@ -70,6 +74,11 @@ def login():
         r = requests.post(f"{AUTH}/token", data={
             "client_id": cid, "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
             "device_code": d["device_code"]}, timeout=30).json()
+        if "refresh_token" in r and _fernet_key():
+            # rodando no GitHub: guarda o token criptografado, sem nunca imprimir
+            _save_refresh(r["refresh_token"])
+            print("OneDrive conectado e token guardado com segurança.")
+            return
         if "refresh_token" in r:
             from cryptography.fernet import Fernet
             print("\nCadastre estes segredos no GitHub (Settings → Secrets → Actions):")
@@ -134,7 +143,7 @@ library.FETCHERS["onedrive"] = _fetch
 
 def sync(db, cfg: dict, log=print) -> int:
     oc = cfg.get("onedrive", {})
-    if not oc.get("ativo") or not os.environ.get("ONEDRIVE_CLIENT_ID"):
+    if not oc.get("ativo") or not os.environ.get("ONEDRIVE_CLIENT_ID") or not _stored_refresh():
         return 0
     roots = []
     for pasta in oc.get("pastas", ["cameraroll"]):

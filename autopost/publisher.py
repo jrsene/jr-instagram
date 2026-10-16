@@ -13,9 +13,36 @@ class Publisher:
         self.cfg, self.root = ig, root
         self.base = f"{ig.get('api_base', 'https://graph.instagram.com').rstrip('/')}/{ig.get('api_versao', 'v23.0')}"
         self.user = os.environ.get("IG_USER_ID")
-        self.token = os.environ.get("IG_ACCESS_TOKEN")
+        self.token = self._load_token()
         if not (self.user and self.token):
             raise RuntimeError("Faltam IG_USER_ID e IG_ACCESS_TOKEN nas variáveis de ambiente.")
+        self._maybe_refresh()
+
+    # O token do Instagram vale 60 dias. Renovamos sozinhos a cada ~7 dias e guardamos criptografado.
+    def _tok_file(self):
+        return self.root / "data" / "ig_token.enc"
+
+    def _load_token(self):
+        key = os.environ.get("STATE_KEY")
+        if key and self._tok_file().exists():
+            from cryptography.fernet import Fernet
+            return Fernet(key.encode()).decrypt(self._tok_file().read_bytes()).decode()
+        return os.environ.get("IG_ACCESS_TOKEN")
+
+    def _maybe_refresh(self):
+        key = os.environ.get("STATE_KEY")
+        f = self._tok_file()
+        if not key or "graph.instagram.com" not in self.base:
+            return
+        if f.exists() and time.time() - f.stat().st_mtime < 7 * 86400:
+            return
+        r = requests.get("https://graph.instagram.com/refresh_access_token",
+                         params={"grant_type": "ig_refresh_token", "access_token": self.token}, timeout=30)
+        if r.ok and r.json().get("access_token"):
+            from cryptography.fernet import Fernet
+            self.token = r.json()["access_token"]
+            f.parent.mkdir(exist_ok=True)
+            f.write_bytes(Fernet(key.encode()).encrypt(self.token.encode()))
 
     # ---------- hospedagem pública dos arquivos ----------
     def public_url(self, path: Path) -> str:

@@ -1,0 +1,26 @@
+# Rode uma vez (Actions → conectar-onedrive → Run workflow) e abra o log:
+# ele mostra um código e um link da Microsoft. Entre no link, digite o código e faça login no OneDrive.
+# O token fica guardado criptografado no state.enc; nada sensível aparece no log.
+name: conectar-onedrive
+on: workflow_dispatch
+permissions:
+  contents: write
+concurrency: autopost
+jobs:
+  login:
+    runs-on: ubuntu-latest
+    env:
+      STATE_KEY: ${{ secrets.STATE_KEY }}
+      ONEDRIVE_CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install requests cryptography pillow numpy pyyaml pydantic
+      - run: |
+          python -m autopost.state unpack
+          python -m autopost onedrive-login
+          python -m autopost.state pack
+      - run: |
+          git config user.name autopost && git config user.email autopost@users.noreply.github.com
+          git add state.enc && git commit -m "onedrive conectado" && git pull --rebase -X theirs origin main && git push
