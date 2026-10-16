@@ -98,10 +98,12 @@ def single(row, cfg) -> Image.Image:
 
 
 def _font(cfg, size):
-    try:
-        return ImageFont.truetype(cfg.get("visual", {}).get("fonte", ""), size)
-    except Exception:
-        return ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+    for name in (cfg.get("visual", {}).get("fonte", ""), "DejaVuSans-Bold.ttf", "arialbd.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            pass
+    return ImageFont.load_default(size)
 
 
 def _wrap(draw, text, font, width):

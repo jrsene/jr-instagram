@@ -54,44 +54,47 @@ def plan_day(db, cfg, day: date, log=print):
 
     kind = ag.get("feed")
     if kind:
-        when = f"{day}T{hr.get('feed', '18:30')}"
-        rows, files = [], []
-        if kind == "foto":
-            rows = library.pick(db, cfg, 1)
-            if rows:
-                files = [out / "feed.jpg"]
-                compose.single(rows[0], cfg).save(files[0], quality=93)
-        elif kind == "montagem":
-            n = [3, 4, 2][seed % 3]
-            rows = library.pick(db, cfg, n, group_by_day=True)
-            if len(rows) >= 2:
-                files = [out / "feed_montagem.jpg"]
-                compose.collage(rows, cfg, seed=seed).save(files[0], quality=93)
-        elif kind == "carrossel":
-            rows = library.pick(db, cfg, 6, group_by_day=True)
-            if len(rows) >= 2:
-                for i, im in enumerate(compose.carousel(rows, cfg, seed=seed)):
-                    f = out / f"carrossel_{i + 1:02d}.jpg"
-                    im.save(f, quality=93)
-                    files.append(f)
-        elif kind == "reel":
-            vids = library.pick(db, cfg, 1, kind="video")
-            if vids:
-                rows = vids
-                files = [compose.video_reel(vids[0], out / "reel.mp4")]
-            else:
+        try:
+            when = f"{day}T{hr.get('feed', '18:30')}"
+            rows, files = [], []
+            if kind == "foto":
+                rows = library.pick(db, cfg, 1)
+                if rows:
+                    files = [out / "feed.jpg"]
+                    compose.single(rows[0], cfg).save(files[0], quality=93)
+            elif kind == "montagem":
+                n = [3, 4, 2][seed % 3]
+                rows = library.pick(db, cfg, n, group_by_day=True)
+                if len(rows) >= 2:
+                    files = [out / "feed_montagem.jpg"]
+                    compose.collage(rows, cfg, seed=seed).save(files[0], quality=93)
+            elif kind == "carrossel":
                 rows = library.pick(db, cfg, 6, group_by_day=True)
-                if len(rows) >= 3:
-                    music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
-                    mus = music[seed % len(music)] if music else None
-                    files = [compose.reel(rows, cfg, out / "reel.mp4", music=mus)]
-        if files:
-            copy = captions.write(rows, cfg, kind, log=log)
-            _save_post(db, cfg, when, "reel" if kind == "reel" else "feed", rows, files, copy)
-            used |= {r["id"] for r in rows}
-            log(f"  feed/{kind}: {len(rows)} mídia(s) → {copy['legenda'][:60]}")
-        else:
-            log(f"  feed/{kind}: mídia insuficiente, pulando")
+                if len(rows) >= 2:
+                    for i, im in enumerate(compose.carousel(rows, cfg, seed=seed)):
+                        f = out / f"carrossel_{i + 1:02d}.jpg"
+                        im.save(f, quality=93)
+                        files.append(f)
+            elif kind == "reel":
+                vids = library.pick(db, cfg, 1, kind="video")
+                if vids:
+                    rows = vids
+                    files = [compose.video_reel(vids[0], out / "reel.mp4")]
+                else:
+                    rows = library.pick(db, cfg, 6, group_by_day=True)
+                    if len(rows) >= 3:
+                        music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
+                        mus = music[seed % len(music)] if music else None
+                        files = [compose.reel(rows, cfg, out / "reel.mp4", music=mus)]
+            if files:
+                copy = captions.write(rows, cfg, kind, log=log)
+                _save_post(db, cfg, when, "reel" if kind == "reel" else "feed", rows, files, copy)
+                used |= {r["id"] for r in rows}
+                log(f"  feed/{kind}: {len(rows)} mídia(s) → {copy['legenda'][:60]}")
+            else:
+                log(f"  feed/{kind}: mídia insuficiente, pulando")
+        except Exception as e:  # um post com problema não derruba o resto do dia
+            log(f"  ! feed/{kind} falhou: {type(e).__name__}: {e}")
 
     times = hr.get("stories", ["09:00", "13:00", "20:00"])
     for i in range(ag.get("stories", 0) or 0):
@@ -168,8 +171,12 @@ def main(argv=None):
     cfg = load_cfg()
     db = library.connect(ROOT)
     if a.cmd in ("run", "ingest"):
-        print(f"lendo o OneDrive… {onedrive.sync(db, cfg)} nova(s)")
-        print(f"baixando do Drive… {drive.sync(ROOT, cfg)} arquivo(s)")
+        for nome, fn in (("lendo o OneDrive", lambda: f"{onedrive.sync(db, cfg)} nova(s)"),
+                         ("baixando do Drive", lambda: f"{drive.sync(ROOT, cfg)} arquivo(s)")):
+            try:
+                print(f"{nome}… {fn()}")
+            except Exception as e:  # uma fonte fora do ar não impede o resto
+                print(f"{nome}… falhou: {type(e).__name__}: {str(e)[:200]}")
         print(f"catalogando… {library.ingest(ROOT, cfg)} nova(s)")
         print(f"curadoria… {curate.curate(db, cfg)} avaliada(s)")
     if a.cmd in ("run", "plan"):
