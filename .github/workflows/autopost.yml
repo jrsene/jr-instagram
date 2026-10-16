@@ -1,0 +1,57 @@
+# Roda o piloto automático nos horários dos posts (horário de Brasília = UTC-3).
+# Nada pessoal fica aberto no repositório: o estado vai criptografado em state.enc (chave STATE_KEY)
+# e só sobem em claro, na pasta media/, os arquivos no momento em que são publicados no Instagram.
+name: autopost
+on:
+  schedule:
+    - cron: "0 12,16,21,23 * * *"   # 09:00, 13:00, 18:00, 20:00 BRT
+  workflow_dispatch: {}
+permissions:
+  contents: write
+concurrency: autopost
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      TZ: America/Sao_Paulo
+      STATE_KEY: ${{ secrets.STATE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      ONEDRIVE_CLIENT_ID: ${{ secrets.ONEDRIVE_CLIENT_ID }}
+      ONEDRIVE_REFRESH_TOKEN: ${{ secrets.ONEDRIVE_REFRESH_TOKEN }}
+      ONEDRIVE_KEY: ${{ secrets.ONEDRIVE_KEY }}
+      GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: confere a configuração
+        run: |
+          if [ -z "$STATE_KEY" ]; then echo "Falta o segredo STATE_KEY; nada a fazer ainda."; exit 0; fi
+      - uses: actions/checkout@v4
+        if: env.STATE_KEY != ''
+      - uses: actions/setup-python@v5
+        if: env.STATE_KEY != ''
+        with: {python-version: "3.12"}
+      - if: env.STATE_KEY != ''
+        run: sudo apt-get install -y ffmpeg fonts-inter && pip install -r requirements.txt
+      - name: cópias do OneDrive já baixadas
+        if: env.STATE_KEY != ''
+        uses: actions/cache@v4
+        with:
+          path: data/cache/od_*
+          key: od-${{ github.run_id }}
+          restore-keys: od-
+      - if: env.STATE_KEY != ''
+        run: |
+          python -m autopost.state unpack
+          python -m autopost run
+          find output -mindepth 1 -maxdepth 1 -type d -mtime +10 -exec rm -rf {} + || true
+          python -m autopost.state pack
+      - name: guarda o estado criptografado
+        if: env.STATE_KEY != ''
+        run: |
+          git config user.name autopost && git config user.email autopost@users.noreply.github.com
+          git add state.enc
+          git commit -m "autopost $(date +%F_%H%M)" || echo "nada novo"
+          git pull --rebase -X theirs origin main && git push

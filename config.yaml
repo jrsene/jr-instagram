@@ -1,0 +1,82 @@
+# ===== Piloto automático do Instagram =====
+# modo: dry_run  -> gera tudo e mostra prévia, não publica nada
+#       approve  -> gera e deixa "pendente"; publica só o que você aprovar
+#       auto     -> gera e publica sozinho
+mode: dry_run
+
+perfil:
+  handle: "@jr.prs"              # aparece discreto nos stories
+  idioma: pt-BR
+  # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
+  voz: >
+    Descontraído, autêntico e próximo. Frases curtas, um toque de humor,
+    sem exagero de emojis. Fala com o seguidor como amigo.   # ajuste quando quiser
+  hashtags_fixas: []               # ex: ["#fotografia", "#minhacidade"]
+  max_hashtags: 8
+
+# Pastas de onde vêm as fotos e vídeos (pode ter subpastas).
+# Tudo que cair aqui é catalogado automaticamente.
+fontes:
+  - inbox
+
+# OneDrive: lê o Álbum da Câmera (Upload da Câmera do iPhone). Fonte principal.
+onedrive:
+  ativo: true
+  pastas: [cameraroll]   # ou caminhos, ex: "Imagens/Viagem 2025"
+  por_execucao: 40       # quantas fotos novas avaliar por rodada (recentes + amostra das antigas)
+
+# Pastas do Google Drive puxadas automaticamente (IDs das pastas, com subpastas).
+# Compartilhe cada pasta com o e-mail da conta de serviço (variável GDRIVE_SA_JSON).
+drive:
+  pastas:
+    - 1bcB8lIjuvhwlYTgkIi173BbJUbloPaOp   # FOTOS
+  max_mb: 300
+
+# Filtro com IA: reprova prints, documentos, fotos acidentais, borradas ou íntimas.
+curadoria:
+  ia: true
+  extra: ""          # ex: "não postar fotos do trabalho", "nada com crianças"
+
+# O que publicar em cada dia da semana (seg, ter, qua, qui, sex, sab, dom).
+# Tipos de post no feed: foto, montagem, carrossel, reel
+# stories: quantos stories gerar por dia
+agenda:
+  seg: {feed: montagem,  stories: 3}
+  ter: {feed: null,      stories: 2}
+  qua: {feed: carrossel, stories: 3}
+  qui: {feed: null,      stories: 2}
+  sex: {feed: reel,      stories: 3}
+  sab: {feed: foto,      stories: 2}
+  dom: {feed: null,      stories: 1}
+horarios:
+  feed: "18:30"
+  stories: ["09:00", "13:00", "20:00"]
+
+regras:
+  nao_repetir_por_dias: 45         # não reusa a mesma mídia antes disso
+  preferir_novas: true             # fotos recém-tiradas têm prioridade
+  reciclar_quando_faltar: true     # sem foto inédita? reaproveita a usada há mais tempo
+  qualidade_minima: 0.25           # 0-1, descarta fotos borradas/escuras
+
+visual:
+  fundo: "#F4EFE8"                 # cor de fundo das montagens
+  espaco: 14                       # espaço entre fotos (px)
+  cantos: 28                       # arredondamento nos stories
+  fonte: "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
+  musica_pasta: assets/music       # mp3 opcionais para os reels
+
+ia:
+  legendas: true                   # usa Claude (precisa ANTHROPIC_API_KEY)
+  modelo: claude-opus-5-5
+
+instagram:
+  # Preencha quando conectar a conta (Conta Profissional/Criador).
+  # Os segredos vêm de variáveis de ambiente, nunca deste arquivo:
+  #   IG_USER_ID, IG_ACCESS_TOKEN
+  api_base: "https://graph.instagram.com"   # ou https://graph.facebook.com
+  api_versao: "v23.0"
+  # A API do Instagram exige que cada arquivo esteja num link público.
+  # hospedagem: github -> sobe os arquivos num repositório público (GH_TOKEN, GH_REPO)
+  #             url_prefix -> você já sincroniza a pasta output/ em algum site
+  hospedagem: github
+  url_prefix: ""

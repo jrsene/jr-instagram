@@ -1,0 +1,5 @@
+inbox/*
+!inbox/.gitkeep
+__pycache__/
+data/
+output/

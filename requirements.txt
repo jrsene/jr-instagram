@@ -1,0 +1,11 @@
+pillow>=11
+pillow-heif
+rawpy
+numpy
+pyyaml
+requests
+pydantic>=2
+anthropic>=1.15
+google-api-python-client
+google-auth
+cryptography
