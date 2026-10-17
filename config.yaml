@@ -48,6 +48,13 @@ agenda:
   sex: {feed: reel,      stories: 3}
   sab: {feed: foto,      stories: 2}
   dom: {feed: null,      stories: 1}
+# Extras automáticos:
+#   lembranca: num dia da semana, um story com uma foto desta mesma época em anos anteriores ("Há 3 anos…")
+#   resumo_semana: num dia sem post no feed, um reel com os melhores momentos dos últimos 7 dias
+extras:
+  lembranca: qui
+  resumo_semana: dom
+
 horarios:
   feed: "18:30"
   stories: ["09:00", "13:00", "20:00"]

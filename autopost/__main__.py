@@ -93,7 +93,27 @@ def plan_day(db, cfg, day: date, log=print):
         else:
             log(f"  feed/{kind}: mídia insuficiente, pulando")
 
+    ex = cfg.get("extras", {}) or {}
+    if ex.get("resumo_semana") == DIAS[day.weekday()] and not kind:
+        rows = week_media(db, day)
+        if len(rows) >= 4:
+            music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
+            files = [compose.reel(rows, cfg, out / "resumo_semana.mp4", music=music[seed % len(music)] if music else None)]
+            copy = captions.write(rows, cfg, "resumo da semana (reel com os melhores momentos dos últimos 7 dias)", log=log)
+            _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, files, copy)
+            log(f"  resumo da semana: {len(rows)} fotos")
+
     times = hr.get("stories", ["09:00", "13:00", "20:00"])
+    if ex.get("lembranca") == DIAS[day.weekday()]:
+        rows = memories(db, day, exclude=used)
+        if rows:
+            anos = day.year - int(rows[0]["taken_at"][:4])
+            f = out / "story_lembranca.jpg"
+            compose.story(rows, cfg, text=f"Há {anos} ano{'s' if anos > 1 else ''}…").save(f, quality=92)
+            _save_post(db, cfg, f"{day}T{times[-1]}", "story", rows, [f], {"texto_story": f"Há {anos} anos", "legenda": "", "hashtags": [], "alt_text": ""})
+            used |= {r["id"] for r in rows}
+            log(f"  lembrança: foto de {rows[0]['taken_at'][:10]}")
+
     for i in range(ag.get("stories", 0) or 0):
         n = 1 if (seed + i) % 3 else 2
         rows = library.pick(db, cfg, n, group_by_day=n > 1, exclude=used)
@@ -107,6 +127,28 @@ def plan_day(db, cfg, day: date, log=print):
         used |= {r["id"] for r in rows}
         log(f"  story {i + 1}: “{copy['texto_story']}”")
     db.commit()
+
+
+def memories(db, day: date, exclude=(), janela=3) -> list:
+    """Fotos tiradas nesta mesma época (±janela dias) em anos anteriores: a melhor delas."""
+    md = {(day + timedelta(days=d)).strftime("%m-%d") for d in range(-janela, janela + 1)}
+    rows = [r for r in db.execute("select * from media where kind='image' and ok=1 and taken_at<? "
+                                  "order by score desc", (f"{day.year}-01-01",))
+            if r["taken_at"][5:10] in md and r["id"] not in exclude]
+    return rows[:1]
+
+
+def week_media(db, day: date, n=8) -> list:
+    """As melhores fotos usadas nos posts dos últimos 7 dias, para o resumo da semana."""
+    ids: list = []
+    for (m,) in db.execute("select media_ids from posts where scheduled_for>=? and scheduled_for<? and type!='reel'",
+                           ((day - timedelta(days=7)).isoformat(), day.isoformat())):
+        ids += [i for i in json.loads(m) if i not in ids]
+    if not ids:
+        return []
+    rows = db.execute(f"select * from media where kind='image' and id in ({','.join('?' * len(ids))})", ids).fetchall()
+    return sorted(rows, key=lambda r: r["taken_at"])[:n] if len(rows) <= n else \
+        sorted(sorted(rows, key=lambda r: -r["score"])[:n], key=lambda r: r["taken_at"])
 
 
 def publish_due(db, cfg, log=print):
