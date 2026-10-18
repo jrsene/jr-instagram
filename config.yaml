@@ -56,9 +56,11 @@ extras:
   resumo_semana: dom
 
 # Narração com a sua voz nos reels (clonagem local e gratuita, sem ElevenLabs).
-# Coloque um áudio de 10 a 30 s de você falando em data/voz/ (vai criptografado, nunca fica aberto).
+# Grave um áudio de 10 a 30 s falando normalmente e salve no OneDrive na pasta "jr-instagram/voz".
+# O piloto baixa sozinho e guarda criptografado (nunca fica aberto no repositório).
 narracao:
   ativo: true
+  pasta_onedrive: jr-instagram/voz
   idioma: pt
   expressividade: 0.5     # 0.3 mais calmo, 0.8 mais animado
 

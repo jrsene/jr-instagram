@@ -141,10 +141,35 @@ def _fetch(row, dest: Path, video: bool):
 library.FETCHERS["onedrive"] = _fetch
 
 
+def sync_voz(cfg: dict, log=print):
+    """Amostra da voz para a narração: o áudio mais recente da pasta do OneDrive (padrão 'jr-instagram/voz')."""
+    pasta = (cfg.get("narracao") or {}).get("pasta_onedrive", "jr-instagram/voz")
+    try:
+        r = requests.get(f"{GRAPH}/me/drive/root:/{pasta}:/children?$select=id,name,file,lastModifiedDateTime",
+                         headers={"Authorization": f"Bearer {access_token()}"}, timeout=60)
+        if r.status_code == 404:
+            return
+        r.raise_for_status()
+        audios = [it for it in r.json().get("value", []) if "file" in it and
+                  Path(it["name"]).suffix.lower() in {".m4a", ".wav", ".mp3", ".ogg", ".aac"}]
+        if not audios:
+            return
+        it = max(audios, key=lambda x: x["lastModifiedDateTime"])
+        dest = library.ROOT / "data" / "voz" / ("amostra" + Path(it["name"]).suffix.lower())
+        if dest.exists() and dest.stat().st_mtime >= time.mktime(time.strptime(it["lastModifiedDateTime"][:19], "%Y-%m-%dT%H:%M:%S")):
+            return
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(_get(f"/me/drive/items/{it['id']}/content").content)
+        log(f"  🎙 amostra de voz atualizada ({it['name']})")
+    except Exception as e:
+        log(f"  ! amostra de voz: {e}")
+
+
 def sync(db, cfg: dict, log=print) -> int:
     oc = cfg.get("onedrive", {})
     if not oc.get("ativo") or not os.environ.get("ONEDRIVE_CLIENT_ID") or not _stored_refresh():
         return 0
+    sync_voz(cfg, log)
     roots = []
     for pasta in oc.get("pastas", ["cameraroll"]):
         url = f"/me/drive/special/{pasta}" if pasta == "cameraroll" else f"/me/drive/root:/{pasta}"

@@ -1,8 +1,8 @@
 """Narração com a voz do Junior nos reels (clonagem de voz local, de graça, sem crédito).
 
 Usa o Chatterbox Multilingual (código aberto, roda na própria máquina do GitHub, fala português).
-A amostra da voz fica em data/voz/ (10 a 30 s de você falando, .wav/.m4a/.mp3) e vai
-criptografada no state.enc, nunca aberta no repositório. Sem amostra, o reel sai só com música.
+A amostra da voz (10 a 30 s de você falando) vem da pasta do OneDrive "jr-instagram/voz", fica em data/voz/
+e vai criptografada no state.enc, nunca aberta no repositório. Sem amostra, o reel sai só com música.
 """
 import subprocess
 from pathlib import Path
