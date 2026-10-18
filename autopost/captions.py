@@ -15,6 +15,7 @@ class Copy(BaseModel):
     hashtags: list[str]   # hashtags relevantes, com '#'
     texto_story: str      # frase curta (até ~8 palavras) para colocar em cima do story
     alt_text: str         # descrição acessível da imagem
+    narracao: str = ""    # só para reels: 1 a 2 frases faladas em primeira pessoa (narração com a voz dele)
 
 
 FALLBACK = [
@@ -53,6 +54,9 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 "Escreva uma legenda curta e natural (1 a 3 frases, pode ter uma pergunta para engajar), "
                 f"até {maxh} hashtags específicas ao que aparece (nada genérico tipo #love), "
                 "um texto bem curto para o story e um alt text descritivo. "
+                + ("Como é um reel, escreva também a narração: 1 ou 2 frases curtas, faladas em primeira pessoa, "
+                   "naturais como alguém contando o momento para um amigo (até ~12 segundos de fala). "
+                   if "reel" in formato else "") +
                 "Não invente nomes de lugares ou pessoas que não dá para ver nas fotos.")})
             resp = client.messages.parse(
                 model=ia.get("modelo", "claude-opus-5-5"),
@@ -65,11 +69,11 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 c = resp.parsed_output
                 tags = list(dict.fromkeys(fixed + [t if t.startswith("#") else f"#{t}" for t in c.hashtags]))[:maxh + len(fixed)]
                 return {"legenda": c.legenda, "hashtags": tags, "texto_story": c.texto_story,
-                        "alt_text": c.alt_text, "fonte": "ia"}
+                        "alt_text": c.alt_text, "narracao": c.narracao, "fonte": "ia"}
         except Exception as e:
             log(f"  ! IA indisponível ({type(e).__name__}: {e}); usando legenda padrão")
     return {"legenda": random.choice(FALLBACK), "hashtags": fixed, "texto_story": random.choice(FALLBACK_STORY),
-            "alt_text": "", "fonte": "modelo"}
+            "alt_text": "", "narracao": "", "fonte": "modelo"}
 
 
 def full_caption(c: dict) -> str:

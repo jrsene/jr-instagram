@@ -174,8 +174,10 @@ def carousel(rows, cfg, seed=None) -> list[Image.Image]:
     return slides[:10]
 
 
-def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4) -> Path:
-    """Reel 9:16 a partir de fotos: zoom suave (Ken Burns) com transições."""
+def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path | None = None,
+         falado: str = "") -> Path:
+    """Reel 9:16 a partir de fotos: zoom suave (Ken Burns) com transições.
+    Com voice (narração), a música abaixa enquanto a voz fala e o texto falado aparece como legenda."""
     W, H = STORY
     fps = 30
     frames = int(per * fps)
@@ -204,25 +206,62 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4) -> Path:
             last = tag
         total = per * len(clips) - xf * (len(clips) - 1)
         cmd = ["ffmpeg", "-y", "-v", "error", *inputs]
+        n = len(clips)
         if music:
             cmd += ["-i", str(music)]
+        if voice:
+            cmd += ["-i", str(voice)]
+        fade = f"afade=t=out:st={total - 1:.2f}:d=1"
+        audio = None
+        if music and voice:
+            # voz entra 0,5 s depois; música fica baixinha por baixo
+            filt.append(f"[{n}:a]volume=0.22,atrim=0:{total:.2f}[m];[{n + 1}:a]adelay=500|500,volume=1.6[vo];"
+                        f"[m][vo]amix=inputs=2:duration=first:normalize=0,{fade}[a]")
+            audio = "[a]"
+        elif voice:
+            filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade}[a]")
+            audio = "[a]"
+        if voice and falado and cfg.get("edicao", {}).get("legenda_fala", True):
+            from . import edicao
+            ass = edicao.legenda_ass(edicao.palavras_no_tempo(falado, 0.5, edicao.duracao(voice)),
+                                     Path(td) / "fala.ass", (W, H))
+            filt.append(f"{last}subtitles='{ass}'[vs]")
+            last = "[vs]"
         if filt:
             cmd += ["-filter_complex", ";".join(filt), "-map", last]
         else:
             cmd += ["-map", "0:v"]
-        if music:
-            cmd += ["-map", f"{len(clips)}:a", "-af", f"afade=t=out:st={total - 1:.2f}:d=1", "-c:a", "aac", "-shortest"]
+        if audio:
+            cmd += ["-map", audio, "-c:a", "aac"]
+        elif music:
+            cmd += ["-map", f"{n}:a", "-af", fade, "-c:a", "aac", "-shortest"]
         cmd += ["-t", f"{total:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
         subprocess.run(cmd, check=True)
     return out
 
 
-def video_reel(row, out: Path, max_s=30) -> Path:
-    """Vídeo seu → Reel 9:16 (corta no máximo max_s e preenche com fundo desfocado se for horizontal)."""
+def video_reel(row, out: Path, max_s=30, cfg=None, log=print) -> Path:
+    """Vídeo seu → Reel 9:16 (corta no máximo max_s e preenche com fundo desfocado se for horizontal).
+    Se tiver fala, corta as pausas e coloca legenda no tempo de cada palavra."""
     W, H = STORY
     vf = (f"split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg];"
           f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p")
     src = library.local(row, video=True)
+    ec = (cfg or {}).get("edicao", {})
+    if cfg is not None and ec.get("cortar_pausas", True):
+        from . import edicao
+        words = [w for w in edicao.transcrever(src, cfg, log=log) if w[0] < max_s]
+        if len(words) >= 4:
+            trechos = edicao.trechos_com_fala(words, min(max_s, edicao.duracao(src)), pausa=ec.get("pausa_max", 0.6))
+            novo = edicao.remapear(words, trechos)
+            with tempfile.TemporaryDirectory() as td:
+                vf2 = vf
+                if ec.get("legenda_fala", True):
+                    ass = edicao.legenda_ass(novo, Path(td) / "fala.ass", (W, H))
+                    vf2 = vf.replace(",format=yuv420p", f",subtitles='{ass}',format=yuv420p")
+                edicao.cortar(src, out, trechos, vf2)
+            log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
+            return out
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", str(max_s), "-filter_complex", vf,
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-movflags", "+faststart",
                     str(out)], check=True)

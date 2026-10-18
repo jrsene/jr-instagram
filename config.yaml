@@ -55,6 +55,20 @@ extras:
   lembranca: qui
   resumo_semana: dom
 
+# Narração com a sua voz nos reels (clonagem local e gratuita, sem ElevenLabs).
+# Coloque um áudio de 10 a 30 s de você falando em data/voz/ (vai criptografado, nunca fica aberto).
+narracao:
+  ativo: true
+  idioma: pt
+  expressividade: 0.5     # 0.3 mais calmo, 0.8 mais animado
+
+# Edição automática dos seus vídeos falados: corta as pausas e põe legenda no tempo de cada palavra.
+edicao:
+  cortar_pausas: true
+  pausa_max: 0.6          # segundos de silêncio que viram corte
+  legenda_fala: true      # legenda animada (também na narração dos reels)
+  modelo_fala: small      # tiny/base/small: maior = transcreve melhor, mais lento
+
 horarios:
   feed: "18:30"
   stories: ["09:00", "13:00", "20:00"]

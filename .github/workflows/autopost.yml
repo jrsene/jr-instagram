@@ -42,9 +42,20 @@ jobs:
           path: data/cache/od_*
           key: od-${{ github.run_id }}
           restore-keys: od-
+      - name: modelos de fala e voz já baixados
+        if: env.STATE_KEY != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-${{ github.run_id }}
+          restore-keys: hf-
       - if: env.STATE_KEY != ''
         run: |
           python -m autopost.state unpack
+          # narração com a sua voz: só instala o motor se houver amostra em data/voz/
+          if ls data/voz/* >/dev/null 2>&1; then
+            pip install -q --extra-index-url https://download.pytorch.org/whl/cpu chatterbox-tts || echo "motor de voz indisponível"
+          fi
           python -m autopost run
           find output -mindepth 1 -maxdepth 1 -type d -mtime +10 -exec rm -rf {} + || true
           python -m autopost.state pack

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-from . import captions, compose, curate, drive, library, onedrive
+from . import captions, compose, curate, drive, library, onedrive, voz
 
 ROOT = Path(__file__).resolve().parent.parent
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
@@ -56,7 +56,7 @@ def plan_day(db, cfg, day: date, log=print):
     if kind:
         try:
             when = f"{day}T{hr.get('feed', '18:30')}"
-            rows, files = [], []
+            rows, files, copy = [], [], None
             if kind == "foto":
                 rows = library.pick(db, cfg, 1)
                 if rows:
@@ -79,15 +79,20 @@ def plan_day(db, cfg, day: date, log=print):
                 vids = library.pick(db, cfg, 1, kind="video")
                 if vids:
                     rows = vids
-                    files = [compose.video_reel(vids[0], out / "reel.mp4")]
+                    files = [compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log)]
                 else:
                     rows = library.pick(db, cfg, 6, group_by_day=True)
                     if len(rows) >= 3:
                         music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
                         mus = music[seed % len(music)] if music else None
-                        files = [compose.reel(rows, cfg, out / "reel.mp4", music=mus)]
+                        copy = captions.write(rows, cfg, kind, log=log)
+                        vo = voz.falar(copy.get("narracao", ""), cfg, out / "narracao.wav", log=log)
+                        files = [compose.reel(rows, cfg, out / "reel.mp4", music=mus, voice=vo,
+                                              falado=copy.get("narracao", "") if vo else "")]
+                        if vo:
+                            log(f"  narração: “{copy['narracao']}”")
             if files:
-                copy = captions.write(rows, cfg, kind, log=log)
+                copy = copy or captions.write(rows, cfg, kind, log=log)
                 _save_post(db, cfg, when, "reel" if kind == "reel" else "feed", rows, files, copy)
                 used |= {r["id"] for r in rows}
                 log(f"  feed/{kind}: {len(rows)} mídia(s) → {copy['legenda'][:60]}")
@@ -101,8 +106,11 @@ def plan_day(db, cfg, day: date, log=print):
         rows = week_media(db, day)
         if len(rows) >= 4:
             music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
-            files = [compose.reel(rows, cfg, out / "resumo_semana.mp4", music=music[seed % len(music)] if music else None)]
             copy = captions.write(rows, cfg, "resumo da semana (reel com os melhores momentos dos últimos 7 dias)", log=log)
+            vo = voz.falar(copy.get("narracao", ""), cfg, out / "narracao_resumo.wav", log=log)
+            files = [compose.reel(rows, cfg, out / "resumo_semana.mp4",
+                                  music=music[seed % len(music)] if music else None, voice=vo,
+                                  falado=copy.get("narracao", "") if vo else "")]
             _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, files, copy)
             log(f"  resumo da semana: {len(rows)} fotos")
 
