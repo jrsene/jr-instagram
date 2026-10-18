@@ -116,7 +116,7 @@ def _walk(item_id):
 
 
 def _fetch_thumb(item_id, dest: Path, size=1800):
-    r = _get(f"/me/drive/items/{item_id}/thumbnails/0/{size}x{size}/content")
+    r = _get(f"/me/drive/items/{item_id}/thumbnails/0/c{size}x{size}/content")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(r.content)
 
