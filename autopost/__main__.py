@@ -243,6 +243,13 @@ def main(argv=None):
                 print(f"{nome}… falhou: {type(e).__name__}: {str(e)[:200]}")
         print(f"catalogando… {library.ingest(ROOT, cfg)} nova(s)")
         print(f"curadoria… {curate.curate(db, cfg)} avaliada(s)")
+    if a.cmd in ("run", "plan") and cfg.get("mode") != "dry_run":
+        # rascunhos do modo teste que ainda não venceram são refeitos (agora com legenda da IA e status certo)
+        n = db.execute("delete from posts where status='rascunho' and scheduled_for>?",
+                       (datetime.now().isoformat(timespec="minutes"),)).rowcount
+        db.commit()
+        if n:
+            print(f"{n} rascunho(s) do modo teste refeito(s) para publicar")
     if a.cmd in ("run", "plan"):
         start = date.fromisoformat(a.data) if a.data else date.today()
         for i in range(a.dias):
