@@ -56,7 +56,8 @@ jobs:
           if ls data/voz/* >/dev/null 2>&1; then
             pip install -q --extra-index-url https://download.pytorch.org/whl/cpu chatterbox-tts || echo "motor de voz indisponível"
           fi
-          python -m autopost run
+          # se a rodada falhar, o estado (curadoria já paga, posts publicados) é salvo mesmo assim
+          python -m autopost run || echo "falhou=1" >> "$GITHUB_ENV"
           find output -mindepth 1 -maxdepth 1 -type d -mtime +10 -exec rm -rf {} + || true
           python -m autopost.state pack
       - name: guarda o estado criptografado
@@ -66,3 +67,6 @@ jobs:
           git add state.enc
           git commit -m "autopost $(date +%F_%H%M)" || echo "nada novo"
           git pull --rebase -X theirs origin main && git push
+      - name: avisa se a rodada falhou
+        if: env.falhou == '1'
+        run: exit 1
