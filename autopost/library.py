@@ -37,7 +37,7 @@ FETCHERS = {}  # prefixo da origem (ex: "onedrive") -> função que rebaixa a m�
 
 def local(row, video: bool = False) -> Path:
     """Caminho local da cópia em cache (foto ou vídeo), rebaixando da nuvem se precisar."""
-    p = Path(row["cache"])
+    p = Path(row["cache"] or f"data/cache/{row['id']}.jpg")
     p = p if p.is_absolute() else ROOT / p
     if video:
         p = p.with_suffix(".mp4")

@@ -49,14 +49,19 @@ def curate(db, cfg, log=print, batch=8) -> int:
         import anthropic
         client = anthropic.Anthropic()
     for i in range(0, len(rows), batch):
-        chunk = rows[i:i + batch]
+        chunk, imgs = [], []
+        for r in rows[i:i + batch]:  # foto sem cópia local (nem na nuvem) sai da fila em vez de derrubar a rodada
+            try:
+                imgs.append(_b64(library.local(r), 512))
+                chunk.append(r)
+            except Exception as e:
+                db.execute("update media set ok=0, motivo=? where id=?", (f"arquivo indisponível ({type(e).__name__})", r["id"]))
         verdicts = {}
-        if client:
+        if client and chunk:
             content = []
-            for k, r in enumerate(chunk):
+            for k, img in enumerate(imgs):
                 content += [{"type": "text", "text": f"Foto {k}:"},
-                            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                                                         "data": _b64(library.local(r), 512)}}]
+                            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}}]
             content.append({"type": "text", "text": (
                 f"Você faz a curadoria do Instagram {_tipo(cfg)} {cfg.get('perfil', {}).get('handle', '')}. "
                 "Para cada foto, diga se é boa para postar. Reprove: prints de tela, documentos, notas fiscais, "

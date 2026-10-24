@@ -183,6 +183,12 @@ def publish_due(db, cfg, log=print):
     from .publisher import Publisher
     pub = Publisher(cfg, ROOT)
     now = datetime.now().isoformat(timespec="minutes")
+    # post que perdeu o horário por mais de 3h não sai atrasado (ex.: piloto ficou parado)
+    limite = (datetime.now() - timedelta(hours=3)).isoformat(timespec="minutes")
+    n = db.execute("update posts set status='atrasado' where status in ('pronto','aprovado') and scheduled_for<?",
+                   (limite,)).rowcount
+    if n:
+        log(f"  {n} post(s) passaram do horário e não serão publicados")
     for p in db.execute("select * from posts where status in ('pronto','aprovado') and scheduled_for<=? "
                         "order by scheduled_for", (now,)).fetchall():
         try:
@@ -231,8 +237,8 @@ def refazer_perfil(db, cfg):
     if marca.exists():
         return
     n = db.execute("update media set ok=null where ok is not null and kind='image'").rowcount
-    p = db.execute("delete from posts where status in ('rascunho','pendente','pronto','aprovado') and scheduled_for>?",
-                   (datetime.now().isoformat(timespec="minutes"),)).rowcount
+    p = db.execute("delete from posts where status in ('rascunho','pendente','pronto','aprovado') "
+                   "and substr(scheduled_for,1,10)>=?", (date.today().isoformat(),)).rowcount
     db.commit()
     marca.parent.mkdir(exist_ok=True)
     marca.touch()
