@@ -210,10 +210,10 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
     if group_by_day:
         days: dict[str, list] = {}
         for r in rows:
-            days.setdefault(r["taken_at"][:10], []).append(r)
+            days.setdefault((r["taken_at"] or r["added_at"] or "")[:10], []).append(r)
         full = [g for g in days.values() if len(g) >= n]
         if full:
-            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), max(x["added_at"] for x in g)))
+            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), max(x["added_at"] or "" for x in g)))
             return sorted(best, key=lambda r: -r["score"])[:n]
     return rows[:n]
 

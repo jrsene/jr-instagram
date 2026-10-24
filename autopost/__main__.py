@@ -163,8 +163,8 @@ def week_media(db, day: date, n=8) -> list:
     if not ids:
         return []
     rows = db.execute(f"select * from media where kind='image' and id in ({','.join('?' * len(ids))})", ids).fetchall()
-    return sorted(rows, key=lambda r: r["taken_at"])[:n] if len(rows) <= n else \
-        sorted(sorted(rows, key=lambda r: -r["score"])[:n], key=lambda r: r["taken_at"])
+    return sorted(rows, key=lambda r: r["taken_at"] or "")[:n] if len(rows) <= n else \
+        sorted(sorted(rows, key=lambda r: -r["score"])[:n], key=lambda r: r["taken_at"] or "")
 
 
 def publish_due(db, cfg, log=print):

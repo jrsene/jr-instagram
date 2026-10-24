@@ -41,7 +41,7 @@ def _tipo(cfg) -> str:
 def curate(db, cfg, log=print, batch=8) -> int:
     # nota ou data faltando quebram a ordenação e o agrupamento por dia
     db.execute("update media set score=0.5 where score is null")
-    db.execute("update media set taken_at=added_at where taken_at is null")
+    db.execute("update media set taken_at=coalesce(added_at, '') where taken_at is null")
     rows = db.execute("select * from media where ok is null").fetchall()
     if not rows:
         return 0
