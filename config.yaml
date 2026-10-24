@@ -3,6 +3,7 @@
 #       approve  -> gera e deixa "pendente"; publica só o que você aprovar
 #       auto     -> gera e publica sozinho
 mode: dry_run
+ligar_com_chave: auto   # assim que ANTHROPIC_API_KEY existir nos secrets, sai do teste e passa a este modo
 
 perfil:
   handle: "@jr.prs"              # aparece discreto nos stories

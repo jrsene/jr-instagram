@@ -25,7 +25,11 @@ DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
 
 
 def load_cfg():
-    return yaml.safe_load((ROOT / "config.yaml").read_text())
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    # Decisão do dono (2026-10-24): fica em teste até a chave da Anthropic chegar, depois liga sozinho.
+    if cfg.get("mode") == "dry_run" and cfg.get("ligar_com_chave") and os.environ.get("ANTHROPIC_API_KEY"):
+        cfg["mode"] = cfg["ligar_com_chave"]
+    return cfg
 
 
 def _status(cfg):
