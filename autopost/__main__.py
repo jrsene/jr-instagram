@@ -11,6 +11,7 @@ Uso:
 """
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -165,6 +166,15 @@ def week_media(db, day: date, n=8) -> list:
 def publish_due(db, cfg, log=print):
     if cfg.get("mode") == "dry_run":
         log("modo dry_run: nada é publicado")
+        if os.environ.get("IG_ACCESS_TOKEN"):  # só confere se o token responde e é a conta certa
+            try:
+                from .publisher import Publisher
+                c = Publisher(cfg, ROOT).conta()
+                ok = str(c.get("user_id")) == os.environ.get("IG_USER_ID")
+                log(f"instagram: @{c.get('username')} ({c.get('account_type')}, {c.get('media_count')} posts)"
+                    f" · id {'confere' if ok else 'NÃO confere com IG_USER_ID'}")
+            except Exception as e:
+                log(f"instagram: token com problema: {str(e)[:300]}")
         return
     from .publisher import Publisher
     pub = Publisher(cfg, ROOT)

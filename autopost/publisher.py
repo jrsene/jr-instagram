@@ -44,6 +44,14 @@ class Publisher:
             f.parent.mkdir(exist_ok=True)
             f.write_bytes(Fernet(key.encode()).encrypt(self.token.encode()))
 
+    def conta(self) -> dict:
+        """Confere o token: devolve usuário, tipo e número de posts da conta conectada."""
+        r = requests.get(f"{self.base}/me", params={"fields": "user_id,username,account_type,media_count",
+                                                    "access_token": self.token}, timeout=30)
+        if r.status_code >= 400:
+            raise RuntimeError(f"Instagram {r.status_code}: {r.text[:300]}")
+        return r.json()
+
     # ---------- hospedagem pública dos arquivos ----------
     def public_url(self, path: Path) -> str:
         mode = self.cfg.get("hospedagem", "github")
