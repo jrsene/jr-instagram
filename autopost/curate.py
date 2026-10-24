@@ -39,6 +39,7 @@ def _tipo(cfg) -> str:
 
 
 def curate(db, cfg, log=print, batch=8) -> int:
+    db.execute("update media set score=0.5 where score is null")  # nota faltando quebra a ordenação
     rows = db.execute("select * from media where ok is null").fetchall()
     if not rows:
         return 0
@@ -80,7 +81,7 @@ def curate(db, cfg, log=print, batch=8) -> int:
         for k, r in enumerate(chunk):
             v = verdicts.get(k)
             if v:
-                score = round(0.5 * r["score"] + 0.5 * max(0.0, min(1.0, v.nota_estetica)), 3)
+                score = round(0.5 * (r["score"] if r["score"] is not None else 0.5) + 0.5 * max(0.0, min(1.0, v.nota_estetica)), 3)
                 db.execute("update media set ok=?, motivo=?, tags=?, score=? where id=?",
                            (int(v.postavel), v.motivo, json.dumps(v.tags, ensure_ascii=False), score, r["id"]))
                 log(f"  {'✓' if v.postavel else '✗'} {os.path.basename(r['path'])}: {v.motivo}")

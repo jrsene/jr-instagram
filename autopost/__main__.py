@@ -265,7 +265,10 @@ def main(argv=None):
             except Exception as e:  # uma fonte fora do ar não impede o resto
                 print(f"{nome}… falhou: {type(e).__name__}: {str(e)[:200]}")
         print(f"catalogando… {library.ingest(ROOT, cfg)} nova(s)")
-        print(f"curadoria… {curate.curate(db, cfg)} avaliada(s)")
+        try:  # falha na curadoria não pode impedir a publicação do dia
+            print(f"curadoria… {curate.curate(db, cfg)} avaliada(s)")
+        except Exception as e:
+            print(f"curadoria… falhou: {type(e).__name__}: {str(e)[:200]}")
     if a.cmd in ("run", "plan") and cfg.get("mode") != "dry_run":
         # rascunhos do modo teste que ainda não venceram são refeitos (agora com legenda da IA e status certo)
         n = db.execute("delete from posts where status='rascunho' and scheduled_for>?",
