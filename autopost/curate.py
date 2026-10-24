@@ -33,6 +33,11 @@ def _heuristic(row) -> tuple[int, str]:
     return 1, "aprovada sem IA"
 
 
+def _tipo(cfg) -> str:
+    p = cfg.get("perfil", {})
+    return f"da empresa {p.get('nome', '')}".strip() if p.get("tipo") == "empresa" else "pessoal"
+
+
 def curate(db, cfg, log=print, batch=8) -> int:
     rows = db.execute("select * from media where ok is null").fetchall()
     if not rows:
@@ -53,7 +58,7 @@ def curate(db, cfg, log=print, batch=8) -> int:
                             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                          "data": _b64(library.local(r), 512)}}]
             content.append({"type": "text", "text": (
-                f"Você faz a curadoria do Instagram pessoal {cfg.get('perfil', {}).get('handle', '')}. "
+                f"Você faz a curadoria do Instagram {_tipo(cfg)} {cfg.get('perfil', {}).get('handle', '')}. "
                 "Para cada foto, diga se é boa para postar. Reprove: prints de tela, documentos, notas fiscais, "
                 "fotos acidentais, muito borradas ou escuras, fotos íntimas ou que exponham dados pessoais, "
                 "e imagens que claramente não são do dono (memes, imagens baixadas). "

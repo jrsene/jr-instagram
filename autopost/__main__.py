@@ -223,6 +223,22 @@ p{{white-space:pre-wrap;margin:6px 0 0}}</style>
     return out / "preview.html"
 
 
+def refazer_perfil(db, cfg):
+    """Quando perfil.versao sobe, refaz a curadoria (com IA) e os posts ainda não publicados."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return
+    marca = ROOT / "data" / f".perfil_v{cfg.get('perfil', {}).get('versao', 1)}"
+    if marca.exists():
+        return
+    n = db.execute("update media set ok=null where ok is not null and kind='image'").rowcount
+    p = db.execute("delete from posts where status in ('rascunho','pendente','pronto','aprovado') and scheduled_for>?",
+                   (datetime.now().isoformat(timespec="minutes"),)).rowcount
+    db.commit()
+    marca.parent.mkdir(exist_ok=True)
+    marca.touch()
+    print(f"perfil mudou: {n} foto(s) voltam para a curadoria e {p} post(s) futuro(s) serão refeitos")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="autopost")
     ap.add_argument("cmd", choices=["run", "ingest", "plan", "publish", "approve", "preview", "onedrive-login"])
@@ -235,6 +251,7 @@ def main(argv=None):
     cfg = load_cfg()
     db = library.connect(ROOT)
     if a.cmd in ("run", "ingest"):
+        refazer_perfil(db, cfg)
         for nome, fn in (("lendo o OneDrive", lambda: f"{onedrive.sync(db, cfg)} nova(s)"),
                          ("baixando do Drive", lambda: f"{drive.sync(ROOT, cfg)} arquivo(s)")):
             try:

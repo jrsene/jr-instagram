@@ -3,15 +3,21 @@
 #       approve  -> gera e deixa "pendente"; publica só o que você aprovar
 #       auto     -> gera e publica sozinho
 mode: dry_run
-ligar_com_chave:         # pausado até confirmar se o @jr.prs é perfil pessoal ou da empresa (auto quando confirmar)
+ligar_com_chave:         # vazio = não publica; "auto" liga a publicação (aguardando o ok do Junior)
 
 perfil:
   handle: "@jr.prs"              # aparece discreto nos stories
   idioma: pt-BR
   # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
+  tipo: empresa                  # empresa ou pessoal (muda a curadoria e o tom)
+  nome: JR Prestadora de Serviços
+  versao: 2                      # mudou o perfil? suba o número: a curadoria e os posts futuros são refeitos
+  # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
   voz: >
-    Descontraído, autêntico e próximo. Frases curtas, um toque de humor,
-    sem exagero de emojis. Fala com o seguidor como amigo.   # ajuste quando quiser
+    Perfil da JR Prestadora de Serviços (obras, reformas, elétrica, automação e acabamentos).
+    Profissional e próximo, com orgulho do trabalho bem feito. Frases curtas, sem exagero de emojis.
+    Mostra o serviço (antes e depois, detalhes de acabamento, equipe trabalhando) e, quando fizer
+    sentido, termina chamando para pedir orçamento pelo WhatsApp do link na bio.
   hashtags_fixas: []               # ex: ["#fotografia", "#minhacidade"]
   max_hashtags: 8
 
@@ -36,7 +42,11 @@ drive:
 # Filtro com IA: reprova prints, documentos, fotos acidentais, borradas ou íntimas.
 curadoria:
   ia: true
-  extra: ""          # ex: "não postar fotos do trabalho", "nada com crianças"
+  extra: >-
+    Perfil de empresa de serviços: aprove obras, reformas, quadros elétricos, automação, acabamentos,
+    antes e depois, equipe trabalhando e eventos da JR. Fotos de dano ou infiltração só se servirem de
+    "antes" de um serviço. Reprove rosto de cliente identificável, fachada ou número de casa, placas de carro,
+    documentos e qualquer dado de cliente, e fotos pessoais ou de família sem relação com o trabalho.
 
 # O que publicar em cada dia da semana (seg, ter, qua, qui, sex, sab, dom).
 # Tipos de post no feed: foto, montagem, carrossel, reel

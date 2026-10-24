@@ -57,7 +57,8 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 + ("Como é um reel, escreva também a narração: 1 ou 2 frases curtas, faladas em primeira pessoa, "
                    "naturais como alguém contando o momento para um amigo (até ~12 segundos de fala). "
                    if "reel" in formato else "") +
-                "Não invente nomes de lugares ou pessoas que não dá para ver nas fotos.")})
+                "Não invente nomes de lugares ou pessoas que não dá para ver nas fotos, "
+                "e não cite dia da semana nem data.")})
             resp = client.messages.parse(
                 model=ia.get("modelo", "claude-opus-5-5"),
                 max_tokens=2000,
