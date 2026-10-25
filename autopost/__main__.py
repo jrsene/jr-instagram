@@ -111,7 +111,7 @@ def plan_day(db, cfg, day: date, log=print):
 
     ex = cfg.get("extras", {}) or {}
     if ex.get("resumo_semana") == DIAS[day.weekday()] and not kind:
-        rows = week_media(db, day)
+        rows = week_media(db, day, nota=cfg.get("regras", {}).get("nota_feed", 0.75))
         if len(rows) >= 4:
             music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
             copy = captions.write(rows, cfg, "resumo da semana (reel com os melhores momentos dos últimos 7 dias)", log=log)
@@ -158,15 +158,17 @@ def memories(db, day: date, exclude=(), janela=3) -> list:
     return rows[:1]
 
 
-def week_media(db, day: date, n=8) -> list:
+def week_media(db, day: date, n=8, nota=0.75) -> list:
     """As melhores fotos usadas nos posts dos últimos 7 dias, para o resumo da semana."""
     ids: list = []
-    for (m,) in db.execute("select media_ids from posts where scheduled_for>=? and scheduled_for<? and type!='reel'",
+    for (m,) in db.execute("select media_ids from posts where scheduled_for>=? and scheduled_for<? and type!='reel'"
+                           " and status in ('publicado','pronto','aprovado')",
                            ((day - timedelta(days=7)).isoformat(), day.isoformat())):
         ids += [i for i in json.loads(m) if i not in ids]
     if not ids:
         return []
-    rows = db.execute(f"select * from media where kind='image' and id in ({','.join('?' * len(ids))})", ids).fetchall()
+    rows = db.execute(f"select * from media where kind='image' and ok=1 and score>=? and id in ({','.join('?' * len(ids))})",
+                      [nota] + ids).fetchall()
     return sorted(rows, key=lambda r: r["taken_at"] or "")[:n] if len(rows) <= n else \
         sorted(sorted(rows, key=lambda r: -r["score"])[:n], key=lambda r: r["taken_at"] or "")
 
@@ -193,6 +195,17 @@ def publish_due(db, cfg, log=print):
                    (limite,)).rowcount
     if n:
         log(f"  {n} post(s) passaram do horário e não serão publicados")
+    # rede de segurança: post montado antes do filtro novo (ou com foto que caiu na curadoria) não sai
+    regras = cfg.get("regras", {})
+    for p in db.execute("select id, type, media_ids from posts where status in ('pronto','aprovado')").fetchall():
+        nota = regras.get("nota_stories", 0.6) if p["type"] == "story" else regras.get("nota_feed", 0.75)
+        ids = json.loads(p["media_ids"] or "[]")
+        boas = db.execute(f"select count(*) from media where (ok=1 and score>=? or kind='video') and id in ({','.join('?' * len(ids))})",
+                          [nota] + ids).fetchone()[0] if ids else 0
+        if boas < len(ids):
+            db.execute("update posts set status='descartado', error='foto abaixo da régua de qualidade' where id=?", (p["id"],))
+            log(f"  post #{p['id']} ({p['type']}) descartado: tem foto abaixo da régua")
+    db.commit()
     for p in db.execute("select * from posts where status in ('pronto','aprovado') and scheduled_for<=? "
                         "order by scheduled_for", (now,)).fetchall():
         try:
