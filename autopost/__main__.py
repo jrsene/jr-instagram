@@ -269,6 +269,9 @@ def main(argv=None):
             print(f"curadoria… {curate.curate(db, cfg)} avaliada(s)")
         except Exception as e:
             print(f"curadoria… falhou: {type(e).__name__}: {str(e)[:200]}")
+        r = cfg.get("regras", {})
+        q = lambda m: db.execute("select count(*) from media where kind='image' and ok=1 and score>=?", (m,)).fetchone()[0]
+        print(f"fotos boas: {q(r.get('nota_feed', 0.75))} para o feed, {q(r.get('nota_stories', 0.6))} para stories")
     if a.cmd in ("run", "plan") and cfg.get("mode") != "dry_run":
         # rascunhos do modo teste que ainda não venceram são refeitos (agora com legenda da IA e status certo)
         n = db.execute("delete from posts where status='rascunho' and scheduled_for>?",

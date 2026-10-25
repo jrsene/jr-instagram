@@ -67,6 +67,14 @@ jobs:
           git add state.enc
           git commit -m "autopost $(date +%F_%H%M)" || echo "nada novo"
           git pull --rebase -X theirs origin main && git push
+      - name: prévia dos posts (só para quem tem acesso ao repositório)
+        if: env.STATE_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: previa
+          path: output/
+          retention-days: 7
+          if-no-files-found: ignore
       - name: avisa se a rodada falhou
         if: env.falhou == '1'
         run: exit 1
