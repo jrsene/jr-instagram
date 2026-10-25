@@ -18,7 +18,7 @@ from pathlib import Path
 
 import yaml
 
-from . import captions, compose, curate, drive, library, onedrive, voz
+from . import captions, compose, curate, drive, library, onedrive, site, voz
 
 ROOT = Path(__file__).resolve().parent.parent
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
@@ -37,6 +37,7 @@ def _status(cfg):
 
 
 def _save_post(db, cfg, when, ptype, rows, files, copy):
+    copy = {**copy, "creditos": site.creditos(rows)}  # arquiteto e fotógrafo vão na legenda e marcados no post
     db.execute("insert into posts(created_at,scheduled_for,type,status,media_ids,files,caption,meta)"
                " values(?,?,?,?,?,?,?,?)",
                (datetime.now().isoformat(timespec="seconds"), when, ptype, _status(cfg),
@@ -138,7 +139,8 @@ def plan_day(db, cfg, day: date, log=print):
             break
         copy = captions.write(rows, cfg, "story", log=log)
         f = out / f"story_{i + 1}.jpg"
-        compose.story(rows, cfg, text=copy["texto_story"]).save(f, quality=92)
+        compose.story(rows, cfg, text=copy["texto_story"],
+                      credito=site.linha_creditos(site.creditos(rows)).replace("\n", " · ")).save(f, quality=92)
         _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], copy)
         used |= {r["id"] for r in rows}
         log(f"  story {i + 1}: “{copy['texto_story']}”")
@@ -193,7 +195,8 @@ def publish_due(db, cfg, log=print):
                         "order by scheduled_for", (now,)).fetchall():
         try:
             meta = json.loads(p["meta"] or "{}")
-            igid = pub.publish(p["type"], [Path(f) for f in json.loads(p["files"])], p["caption"], meta.get("alt_text", ""))
+            igid = pub.publish(p["type"], [Path(f) for f in json.loads(p["files"])], p["caption"], meta.get("alt_text", ""),
+                               marcar=(meta.get("creditos") or {}).get("marcar", []))
             db.execute("update posts set status='publicado', ig_id=? where id=?", (igid, p["id"]))
             log(f"  ✓ publicado #{p['id']} ({p['type']}) → {igid}")
         except Exception as e:
@@ -236,7 +239,7 @@ def refazer_perfil(db, cfg):
     marca = ROOT / "data" / f".perfil_v{cfg.get('perfil', {}).get('versao', 1)}"
     if marca.exists():
         return
-    n = db.execute("update media set ok=null where ok is not null and kind='image'").rowcount
+    n = db.execute("update media set ok=null where ok is not null and kind='image' and path not like 'site:%'").rowcount
     p = db.execute("delete from posts where status in ('rascunho','pendente','pronto','aprovado') "
                    "and substr(scheduled_for,1,10)>=?", (date.today().isoformat(),)).rowcount
     db.commit()
@@ -258,7 +261,8 @@ def main(argv=None):
     db = library.connect(ROOT)
     if a.cmd in ("run", "ingest"):
         refazer_perfil(db, cfg)
-        for nome, fn in (("lendo o OneDrive", lambda: f"{onedrive.sync(db, cfg)} nova(s)"),
+        for nome, fn in (("lendo a galeria do site", lambda: f"{site.sync(db, cfg)} nova(s)"),
+                         ("lendo o OneDrive", lambda: f"{onedrive.sync(db, cfg)} nova(s)"),
                          ("baixando do Drive", lambda: f"{drive.sync(ROOT, cfg)} arquivo(s)")):
             try:
                 print(f"{nome}… {fn()}")

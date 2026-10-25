@@ -82,7 +82,8 @@ def connect(root: Path) -> sqlite3.Connection:
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA)
     cols = {r[1] for r in db.execute("pragma table_info(media)")}
-    for col, typ in (("ok", "int"), ("motivo", "text"), ("tags", "text"), ("phash", "text")):
+    for col, typ in (("ok", "int"), ("motivo", "text"), ("tags", "text"), ("phash", "text"),
+                     ("album", "text"), ("credito", "text")):
         if col not in cols:  # bancos antigos ganham as colunas da curadoria
             db.execute(f"alter table media add column {col} {typ}")
     return db
@@ -199,23 +200,23 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
     minimo = max(rules.get("qualidade_minima", 0.25), rules.get(nota, 0.75 if nota == "nota_feed" else 0.6))
     rows = [r for r in db.execute(
         "select * from media where kind=? and ok=1 and score>=? and (last_used is null or last_used<?)"
-        " order by used_count asc, score desc, added_at desc",
+        " order by used_count asc, (path like 'site:%') desc, score desc, added_at desc",
         (kind, minimo, cutoff)) if r["id"] not in exclude]
     if len(rows) < n and rules.get("reciclar_quando_faltar", True):
         # acabou o conteúdo inédito: recicla o que foi usado há mais tempo
         have = {r["id"] for r in rows} | set(exclude)
         rows += [r for r in db.execute(
-            "select * from media where kind=? and ok=1 and score>=? order by last_used asc, score desc",
+            "select * from media where kind=? and ok=1 and score>=? order by last_used asc, (path like 'site:%') desc, score desc",
             (kind, minimo)) if r["id"] not in have]
     if not rows:
         return []
     if group_by_day:
         days: dict[str, list] = {}
         for r in rows:
-            days.setdefault((r["taken_at"] or r["added_at"] or "")[:10], []).append(r)
+            days.setdefault(r["album"] or (r["taken_at"] or r["added_at"] or "")[:10], []).append(r)  # álbum do site = mesma obra
         full = [g for g in days.values() if len(g) >= n]
         if full:
-            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
+            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), bool(g[0]["album"]), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
             return sorted(best, key=lambda r: -r["score"])[:n]
     return rows[:n]
 

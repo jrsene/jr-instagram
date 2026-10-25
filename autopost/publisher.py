@@ -96,18 +96,37 @@ class Publisher:
         self._wait(cid)
         return cid
 
-    def publish(self, ptype: str, files: list[Path], caption: str, alt: str = "") -> str:
+    @staticmethod
+    def _tags(marcar) -> dict:
+        """Marca arquiteto e fotógrafo na foto (pontos discretos perto do rodapé)."""
+        if not marcar:
+            return {}
+        import json
+        return {"user_tags": json.dumps([{"username": u, "x": round(0.15 + 0.7 * i / max(1, len(marcar) - 1), 2)
+                                          if len(marcar) > 1 else 0.5, "y": 0.92} for i, u in enumerate(marcar[:5])])}
+
+    def _container_tags(self, file: Path, marcar, **extra):
+        try:
+            return self._container(file, **extra, **self._tags(marcar))
+        except RuntimeError as e:  # @ errado ou conta que não aceita marcação: publica sem marcar (o @ segue na legenda)
+            if not marcar:
+                raise
+            print(f"  marcação recusada ({str(e)[:120]}); publicando sem marcar")
+            return self._container(file, **extra)
+
+    def publish(self, ptype: str, files: list[Path], caption: str, alt: str = "", marcar=()) -> str:
+        marcar = list(marcar or [])
         if ptype == "story":
             mt = "STORIES"
             cid = self._container(files[0], media_type=mt)
         elif ptype == "reel":
             cid = self._container(files[0], media_type="REELS", caption=caption, share_to_feed="true")
         elif len(files) > 1:
-            kids = [self._container(f, is_carousel_item="true",
-                                    **({"media_type": "VIDEO"} if f.suffix == ".mp4" else {})) for f in files]
+            kids = [self._container(f, is_carousel_item="true", media_type="VIDEO") if f.suffix == ".mp4"
+                    else self._container_tags(f, marcar, is_carousel_item="true") for f in files]
             cid = self._post(f"{self.user}/media", media_type="CAROUSEL", children=",".join(kids), caption=caption)["id"]
             self._wait(cid)
         else:
             extra = {"alt_text": alt} if alt else {}
-            cid = self._container(files[0], caption=caption, **extra)
+            cid = self._container_tags(files[0], marcar, caption=caption, **extra)
         return self._post(f"{self.user}/media_publish", creation_id=cid)["id"]

@@ -27,6 +27,10 @@ fontes:
   - inbox
 
 # OneDrive: lê o Álbum da Câmera (Upload da Câmera do iPhone). Fonte principal.
+site:                            # galeria do jrobras.com: fotos já aprovadas, com crédito de arquiteto e fotógrafo
+  ativo: true
+  firebase_projeto: jr-zacaria
+
 onedrive:
   ativo: true
   pastas: [cameraroll]   # ou caminhos, ex: "Imagens/Viagem 2025"

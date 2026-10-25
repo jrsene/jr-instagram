@@ -36,6 +36,19 @@ def _b64(path, size=768) -> str:
     return base64.standard_b64encode(buf.getvalue()).decode()
 
 
+def _contexto(rows) -> str:
+    """Nome e descrição do projeto (galeria do site), para a legenda falar da obra certa."""
+    from .site import creditos
+    c = creditos(rows)
+    if not c["albuns"]:
+        return ""
+    txt = "; ".join(f"{a['album']}: {a['descricao']}".strip(": ") for a in c["albuns"])
+    quem = " e ".join(c["nomes_arquitetos"])
+    return (f"Projeto: {txt}. " + (f"Projeto de arquitetura de {quem}. " if quem else "") +
+            "Pode citar o nome do projeto e agradecer a parceria com a arquitetura; os créditos com @ já entram "
+            "sozinhos no fim da legenda, então não escreva @ nem repita os créditos.\n")
+
+
 def write(rows, cfg, formato: str, log=print) -> dict:
     perfil = cfg.get("perfil", {})
     fixed = perfil.get("hashtags_fixas", [])
@@ -51,6 +64,7 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 f"Você cuida do Instagram {perfil.get('handle', '')}. Idioma: {perfil.get('idioma', 'pt-BR')}.\n"
                 f"Tom de voz: {perfil.get('voz', '')}\n"
                 f"Formato do post: {formato}. As imagens acima vão juntas nesse post.\n"
+                + _contexto(rows) +
                 "Escreva uma legenda curta e natural (1 a 3 frases, pode ter uma pergunta para engajar), "
                 f"até {maxh} hashtags específicas ao que aparece (nada genérico tipo #love), "
                 "um texto bem curto para o story e um alt text descritivo. "
@@ -78,5 +92,7 @@ def write(rows, cfg, formato: str, log=print) -> dict:
 
 
 def full_caption(c: dict) -> str:
+    from .site import linha_creditos
     tags = " ".join(c.get("hashtags", []))
-    return f"{c['legenda']}\n\n{tags}".strip()
+    cred = linha_creditos(c.get("creditos") or {})
+    return "\n\n".join(x for x in (c["legenda"], cred, tags) if x).strip()

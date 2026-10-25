@@ -118,7 +118,7 @@ def _wrap(draw, text, font, width):
     return lines + ([cur] if cur else [])
 
 
-def story(rows, cfg, text: str | None = None) -> Image.Image:
+def story(rows, cfg, text: str | None = None, credito: str = "") -> Image.Image:
     """Story 9:16: fundo desfocado da própria foto + foto(s) com cantos arredondados + texto curto."""
     v = cfg.get("visual", {})
     W, H = STORY
@@ -162,6 +162,10 @@ def story(rows, cfg, text: str | None = None) -> Image.Image:
         f = _font(cfg, 34)
         tw = d.textlength(handle, font=f)
         d.text(((W - tw) / 2, H - 90), handle, font=f, fill=(255, 255, 255, 200))
+    if credito:  # arquiteto e fotógrafo do projeto, discreto no rodapé
+        f = _font(cfg, 30)
+        tw = d.textlength(credito, font=f)
+        d.text(((W - tw) / 2, H - 140), credito, font=f, fill=(255, 255, 255, 220))
     return canvas.convert("RGB")
 
 
