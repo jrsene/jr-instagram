@@ -132,7 +132,7 @@ def plan_day(db, cfg, day: date, log=print):
 
     for i in range(ag.get("stories", 0) or 0):
         n = 1 if (seed + i) % 3 else 2
-        rows = library.pick(db, cfg, n, group_by_day=n > 1, exclude=used)
+        rows = library.pick(db, cfg, n, group_by_day=n > 1, exclude=used, nota="nota_stories")
         if not rows:
             log("  story: sem mídia nova, pulando")
             break

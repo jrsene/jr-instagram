@@ -190,21 +190,23 @@ def ingest(root: Path, cfg: dict, log=print) -> int:
     return added
 
 
-def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False, exclude=()) -> list[sqlite3.Row]:
-    """Escolhe n mídias: nunca usadas/menos usadas primeiro, respeitando o intervalo de repetição.
+def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False, exclude=(), nota: str = "nota_feed") -> list[sqlite3.Row]:
+    """Escolhe n mídias: as melhores ainda não usadas primeiro, respeitando o intervalo de repetição.
+    `nota` é a regra de nota mínima (nota_feed ou nota_stories); foto abaixo dela nunca sai.
     Com group_by_day, tenta pegar fotos do mesmo dia (mesmo evento) para montagens coerentes."""
     rules = cfg.get("regras", {})
     cutoff = (datetime.now() - timedelta(days=rules.get("nao_repetir_por_dias", 45))).isoformat()
+    minimo = max(rules.get("qualidade_minima", 0.25), rules.get(nota, 0.75 if nota == "nota_feed" else 0.6))
     rows = [r for r in db.execute(
         "select * from media where kind=? and ok=1 and score>=? and (last_used is null or last_used<?)"
-        " order by used_count asc, added_at desc, score desc",
-        (kind, rules.get("qualidade_minima", 0.25), cutoff)) if r["id"] not in exclude]
+        " order by used_count asc, score desc, added_at desc",
+        (kind, minimo, cutoff)) if r["id"] not in exclude]
     if len(rows) < n and rules.get("reciclar_quando_faltar", True):
         # acabou o conteúdo inédito: recicla o que foi usado há mais tempo
         have = {r["id"] for r in rows} | set(exclude)
         rows += [r for r in db.execute(
             "select * from media where kind=? and ok=1 and score>=? order by last_used asc, score desc",
-            (kind, rules.get("qualidade_minima", 0.25))) if r["id"] not in have]
+            (kind, minimo)) if r["id"] not in have]
     if not rows:
         return []
     if group_by_day:
@@ -213,7 +215,7 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
             days.setdefault((r["taken_at"] or r["added_at"] or "")[:10], []).append(r)
         full = [g for g in days.values() if len(g) >= n]
         if full:
-            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), max(x["added_at"] or "" for x in g)))
+            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
             return sorted(best, key=lambda r: -r["score"])[:n]
     return rows[:n]
 

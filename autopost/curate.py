@@ -67,14 +67,19 @@ def curate(db, cfg, log=print, batch=8) -> int:
                             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img}}]
             content.append({"type": "text", "text": (
                 f"Você faz a curadoria do Instagram {_tipo(cfg)} {cfg.get('perfil', {}).get('handle', '')}. "
-                "Para cada foto, diga se é boa para postar. Reprove: prints de tela, documentos, notas fiscais, "
-                "fotos acidentais, muito borradas ou escuras, fotos íntimas ou que exponham dados pessoais, "
-                "e imagens que claramente não são do dono (memes, imagens baixadas). "
+                "Seja exigente: só entra no Instagram foto que valoriza o trabalho, como num portfólio. "
+                "Reprove (postavel=false): prints de tela, documentos, notas fiscais, fotos acidentais, borradas, "
+                "escuras, tortas/inclinadas, lavadas ou sem contraste, ambientes vazios e sem graça, sujeira, entulho, "
+                "fios soltos, papéis ou objetos largados, enquadramento ruim, fotos íntimas ou que exponham dados "
+                "pessoais, e imagens que claramente não são do dono (memes, imagens baixadas). Na dúvida, reprove. "
                 f"Critérios extras do dono: {crit.get('extra', 'nenhum')}. "
-                "Dê também tags curtas do que aparece e uma nota estética de 0 a 1.")})
+                "Dê tags curtas do que aparece e uma nota estética de 0 a 1, calibrada assim: "
+                "0.9+ foto de destaque (bem iluminada, reta, limpa, acabamento bonito, dá orgulho de mostrar); "
+                "0.75 boa para o feed; 0.6 serve só para stories; abaixo de 0.5 não serve. "
+                "Uma foto comum de celular de um cômodo vazio fica abaixo de 0.5.")})
             try:
                 resp = client.messages.parse(model=cfg.get("ia", {}).get("modelo", "claude-opus-5-5"),
-                                             max_tokens=4000, output_config={"effort": "low"},
+                                             max_tokens=6000, output_config={"effort": "medium"},
                                              messages=[{"role": "user", "content": content}], output_format=Batch)
                 if resp.stop_reason != "refusal" and resp.parsed_output:
                     verdicts = {v.indice: v for v in resp.parsed_output.fotos}
@@ -83,7 +88,7 @@ def curate(db, cfg, log=print, batch=8) -> int:
         for k, r in enumerate(chunk):
             v = verdicts.get(k)
             if v:
-                score = round(0.5 * (r["score"] if r["score"] is not None else 0.5) + 0.5 * max(0.0, min(1.0, v.nota_estetica)), 3)
+                score = round(0.2 * (r["score"] if r["score"] is not None else 0.5) + 0.8 * max(0.0, min(1.0, v.nota_estetica)), 3)
                 db.execute("update media set ok=?, motivo=?, tags=?, score=? where id=?",
                            (int(v.postavel), v.motivo, json.dumps(v.tags, ensure_ascii=False), score, r["id"]))
                 log(f"  {'✓' if v.postavel else '✗'} {os.path.basename(r['path'])}: {v.motivo}")

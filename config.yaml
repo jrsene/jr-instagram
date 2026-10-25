@@ -11,7 +11,7 @@ perfil:
   # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
   tipo: empresa                  # empresa ou pessoal (muda a curadoria e o tom)
   nome: JR Prestadora de Serviços
-  versao: 2                      # mudou o perfil? suba o número: a curadoria e os posts futuros são refeitos
+  versao: 3                      # mudou o perfil? suba o número: a curadoria e os posts futuros são refeitos
   # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
   voz: >
     Perfil da JR Prestadora de Serviços (obras, reformas, elétrica, automação e acabamentos).
@@ -91,6 +91,8 @@ regras:
   preferir_novas: true             # fotos recém-tiradas têm prioridade
   reciclar_quando_faltar: true     # sem foto inédita? reaproveita a usada há mais tempo
   qualidade_minima: 0.25           # 0-1, descarta fotos borradas/escuras
+  nota_feed: 0.75                  # 0-1, nota mínima da IA para ir ao feed (portfólio)
+  nota_stories: 0.6                # 0-1, nota mínima para stories
 
 visual:
   fundo: "#F4EFE8"                 # cor de fundo das montagens
