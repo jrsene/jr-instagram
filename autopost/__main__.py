@@ -47,7 +47,9 @@ def _save_post(db, cfg, when, ptype, rows, files, copy):
 
 
 def plan_day(db, cfg, day: date, log=print):
-    if db.execute("select 1 from posts where substr(scheduled_for,1,10)=?", (day.isoformat(),)).fetchone():
+    # fora do modo teste, rascunho antigo não conta: o dia é montado de novo para publicar de verdade
+    teste = "" if cfg.get("mode") == "dry_run" else " and status!='rascunho'"
+    if db.execute("select 1 from posts where substr(scheduled_for,1,10)=?" + teste, (day.isoformat(),)).fetchone():
         log(f"{day}: já planejado")
         return
     ag = cfg.get("agenda", {}).get(DIAS[day.weekday()], {}) or {}

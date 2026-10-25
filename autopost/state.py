@@ -2,7 +2,7 @@
 
 O repositório é público, então nada pessoal pode ir em texto aberto: data/ e output/ viram um único
 arquivo state.enc, legível só com a chave STATE_KEY (segredo do GitHub).
-Cópias vindas do OneDrive (data/cache/od_*) ficam de fora, porque podem ser rebaixadas a qualquer hora.
+Cópias vindas do OneDrive e do site (data/cache/od_*, site_*) ficam de fora, porque podem ser rebaixadas a qualquer hora.
 
   python -m autopost.state unpack   # antes de rodar
   python -m autopost.state pack     # depois de rodar
@@ -47,7 +47,7 @@ def pack():
 
     def skip(t):
         parts = t.name.split("/")
-        if "/cache/od_" in t.name:
+        if "/cache/od_" in t.name or "/cache/site_" in t.name:  # rebaixáveis da nuvem/site
             return None
         if parts[0] == "output" and len(parts) > 1 and parts[1][:4].isdigit() and parts[1] not in keep:
             return None

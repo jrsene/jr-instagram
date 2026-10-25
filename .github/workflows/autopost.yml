@@ -39,7 +39,9 @@ jobs:
         if: env.STATE_KEY != ''
         uses: actions/cache@v4
         with:
-          path: data/cache/od_*
+          path: |
+            data/cache/od_*
+            data/cache/site_*
           key: od-${{ github.run_id }}
           restore-keys: od-
       - name: modelos de fala e voz já baixados
