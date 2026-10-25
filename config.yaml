@@ -3,7 +3,7 @@
 #       approve  -> gera e deixa "pendente"; publica só o que você aprovar
 #       auto     -> gera e publica sozinho
 mode: dry_run
-ligar_com_chave: auto   # vazio = não publica; "auto" publica sozinho (ligado pelo Junior em 2026-10-24)
+ligar_com_chave:        # vazio = não publica; pausado em 2026-10-25 após post com foto ruim
 
 perfil:
   handle: "@jr.prs"              # aparece discreto nos stories
