@@ -274,7 +274,15 @@ def main(argv=None):
         return onedrive.login()
     cfg = load_cfg()
     db = library.connect(ROOT)
-    if a.cmd in ("run", "ingest"):
+    # a rodada é de hora em hora; buscar e avaliar fotos novas (que custa IA) só a cada `ingestao_horas`
+    marca = ROOT / "data" / ".ultima_ingestao"
+    ingerir = a.cmd == "ingest" or not marca.exists() or \
+        (datetime.now().timestamp() - marca.stat().st_mtime) / 3600 >= cfg.get("ingestao_horas", 6)
+    if a.cmd == "run" and not ingerir:
+        print("fotos novas: já buscadas há pouco, só publicando o que venceu")
+    if a.cmd in ("run", "ingest") and ingerir:
+        marca.parent.mkdir(exist_ok=True)
+        marca.touch()
         refazer_perfil(db, cfg)
         for nome, fn in (("lendo a galeria do site", lambda: f"{site.sync(db, cfg)} nova(s)"),
                          ("lendo o OneDrive", lambda: f"{onedrive.sync(db, cfg)} nova(s)"),

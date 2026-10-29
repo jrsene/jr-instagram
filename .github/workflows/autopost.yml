@@ -1,10 +1,12 @@
-# Roda o piloto automático nos horários dos posts (horário de Brasília = UTC-3).
-# Nada pessoal fica aberto no repositório: o estado vai criptografado em state.enc (chave STATE_KEY)
+# Roda o piloto automático de hora em hora, das 08h às 22h de Brasília (UTC-3). O GitHub costuma pular
+# ou atrasar horários agendados; rodando toda hora, cada post sai na primeira rodada depois do horário dele.
+# Nada pessoal fica aberto no repositório: o estado vai criptografado em state.enc (chave STATE_KEY),
+# guardado como anexo da release "estado" (não no git, para o repositório não inchar a cada rodada),
 # e só sobem em claro, na pasta media/, os arquivos no momento em que são publicados no Instagram.
 name: autopost
 on:
   schedule:
-    - cron: "0 12,16,21,23 * * *"   # 09:00, 13:00, 18:00, 20:00 BRT
+    - cron: "17 0,1,11-23 * * *"   # de hora em hora, 08:17 às 22:17 BRT
   workflow_dispatch: {}
 permissions:
   contents: write
@@ -32,7 +34,7 @@ jobs:
         if: env.STATE_KEY != ''
       - uses: actions/setup-python@v5
         if: env.STATE_KEY != ''
-        with: {python-version: "3.12"}
+        with: {python-version: "3.12", cache: pip}
       - if: env.STATE_KEY != ''
         run: sudo apt-get install -y ffmpeg fonts-inter && pip install -r requirements.txt
       - name: cópias do OneDrive já baixadas
@@ -53,6 +55,10 @@ jobs:
           restore-keys: hf-
       - if: env.STATE_KEY != ''
         run: |
+          # estado: a release "estado" é a fonte; o state.enc antigo do git só vale enquanto ela não existir
+          if gh release view estado >/dev/null 2>&1; then
+            gh release download estado -p state.enc --clobber
+          fi
           python -m autopost.state unpack
           # narração com a sua voz: só instala o motor se houver amostra em data/voz/
           if ls data/voz/* >/dev/null 2>&1; then
@@ -65,10 +71,9 @@ jobs:
       - name: guarda o estado criptografado
         if: env.STATE_KEY != ''
         run: |
-          git config user.name autopost && git config user.email autopost@users.noreply.github.com
-          git add state.enc
-          git commit -m "autopost $(date +%F_%H%M)" || echo "nada novo"
-          git pull --rebase -X theirs origin main && git push
+          gh release view estado >/dev/null 2>&1 || gh release create estado --title "estado (criptografado)" \
+            --notes "Estado do piloto automático, criptografado com a STATE_KEY. Não apague: sem ele o sistema esquece o que já publicou."
+          gh release upload estado state.enc --clobber
       - name: prévia dos posts (só para quem tem acesso ao repositório)
         if: env.STATE_KEY != ''
         uses: actions/upload-artifact@v4
