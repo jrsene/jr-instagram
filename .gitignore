@@ -3,3 +3,4 @@ inbox/*
 __pycache__/
 data/
 output/
+state.enc
