@@ -74,14 +74,6 @@ jobs:
           gh release view estado >/dev/null 2>&1 || gh release create estado --title "estado (criptografado)" \
             --notes "Estado do piloto automático, criptografado com a STATE_KEY. Não apague: sem ele o sistema esquece o que já publicou."
           gh release upload estado state.enc --clobber
-      - name: prévia dos posts (só para quem tem acesso ao repositório)
-        if: env.STATE_KEY != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: previa
-          path: output/
-          retention-days: 7
-          if-no-files-found: ignore
       - name: avisa se a rodada falhou
         if: env.falhou == '1'
         run: exit 1
