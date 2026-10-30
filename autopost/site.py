@@ -104,29 +104,48 @@ def sync(db, cfg: dict, log=print) -> int:
     return added
 
 
+def _nome_e_arroba(nome: str, ig: str) -> str:
+    """Mesmo formato dos créditos do JR OS (galeria e carrossel): "Nome · @perfil"."""
+    nome = (nome or "").strip()
+    if ig and nome.lstrip("@").lower() == ig.lstrip("@").lower():
+        nome = ""
+    return " · ".join(x for x in (nome, ig) if x)
+
+
 def creditos(rows) -> dict:
     """Arquitetos e fotógrafos das fotos de um post (sem repetir)."""
     arq, fot, albuns, nomes = [], [], [], []
+    arq_txt, fot_txt = [], []
     for r in rows:
         c = json.loads((r["credito"] if "credito" in r.keys() else None) or "{}")
         if not c:
             continue
-        for lista, nome, ig in ((arq, c.get("arquiteto"), c.get("arquiteto_ig")), (fot, c.get("fotografo"), c.get("fotografo_ig"))):
+        for lista, txt, nome, ig in ((arq, arq_txt, c.get("arquiteto"), c.get("arquiteto_ig")),
+                                     (fot, fot_txt, c.get("fotografo"), c.get("fotografo_ig"))):
             item = ig or nome
             if item and item not in lista:
                 lista.append(item)
+                txt.append(_nome_e_arroba(nome, ig))
         if c.get("arquiteto") and c["arquiteto"] not in nomes:
             nomes.append(c["arquiteto"])
         if c.get("album") and c["album"] not in [a["album"] for a in albuns]:
             albuns.append({"album": c["album"], "descricao": c.get("descricao", "")})
     marcar = [x.lstrip("@") for x in arq + fot if x.startswith("@")]
-    return {"arquiteto": arq, "fotografo": fot, "marcar": marcar, "albuns": albuns, "nomes_arquitetos": nomes}
+    return {"arquiteto": arq, "fotografo": fot, "marcar": marcar, "albuns": albuns, "nomes_arquitetos": nomes,
+            "arquiteto_txt": arq_txt, "fotografo_txt": fot_txt}
 
 
 def linha_creditos(c: dict) -> str:
-    partes = []
-    if c.get("arquiteto"):
-        partes.append(f"Projeto: {' e '.join(c['arquiteto'])}")
-    if c.get("fotografo"):
-        partes.append(f"Fotografia: {' e '.join(c['fotografo'])}")
+    """Bloco de créditos da legenda, no padrão das artes da galeria do JR OS."""
+    arq = c.get("arquiteto_txt") or c.get("arquiteto") or []
+    fot = c.get("fotografo_txt") or c.get("fotografo") or []
+    if not (arq or fot or c.get("albuns")):
+        return ""
+    partes = ["Execução: JR Prestadora de Serviços"]
+    if arq:
+        partes.append(f"Arquitetura: {' e '.join(arq)}")
+    if fot:
+        partes.append(f"Fotografia: {' e '.join(fot)}")
+    if c.get("albuns"):
+        partes.append("Álbum completo: jrobras.com/galeria")
     return "\n".join(partes)

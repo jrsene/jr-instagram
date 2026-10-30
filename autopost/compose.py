@@ -118,54 +118,102 @@ def _wrap(draw, text, font, width):
     return lines + ([cur] if cur else [])
 
 
-def story(rows, cfg, text: str | None = None, credito: str = "") -> Image.Image:
-    """Story 9:16: fundo desfocado da própria foto + foto(s) com cantos arredondados + texto curto."""
-    v = cfg.get("visual", {})
+# Identidade das artes do JR OS (galeria do site e carrossel "Como a JR fez", feitas pelo Antigravity)
+JR_DOURADO = (201, 162, 75)    # #C9A24B
+JR_CREME = (233, 210, 160)     # #E9D2A0
+JR_FUNDO = (7, 6, 10)
+JR_QUADRO = (16, 13, 18)       # #100D12
+
+
+def _font_peso(cfg, size, peso="Bold"):
+    """Fonte do perfil no peso pedido (Inter: SemiBold, Bold, ExtraBold), com alternativas."""
+    base = cfg.get("visual", {}).get("fonte", "")
+    nomes = [base.replace("Bold", peso)] if "Bold" in base else []
+    nomes += [base, "DejaVuSans-Bold.ttf" if peso != "SemiBold" else "DejaVuSans.ttf", "arialbd.ttf"]
+    for name in nomes:
+        try:
+            return ImageFont.truetype(name, size)
+        except Exception:
+            pass
+    return ImageFont.load_default(size)
+
+
+def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict | None = None,
+          selo: str | None = None) -> Image.Image:
+    """Story 9:16 no visual do JR OS: foto inteira num quadro escuro (sem cortar projeto em paisagem),
+    selo JR no alto, título curto e, quando a foto é da galeria do site, arquitetura, fotografia e o
+    convite para ver o álbum em jrobras.com."""
     W, H = STORY
+    c = creditos or {}
+    do_site = bool(c.get("albuns") or c.get("arquiteto") or c.get("fotografo"))
     base = _load(rows[0])
-    bg = smart_fit(base, (W // 4, H // 4)).filter(ImageFilter.GaussianBlur(14)).resize(STORY, Image.LANCZOS)
-    bg = ImageEnhance.Brightness(bg).enhance(0.62)
+    bg = smart_fit(base, (W // 2, H // 2)).filter(ImageFilter.GaussianBlur(6)).resize(STORY, Image.LANCZOS)
     canvas = bg.convert("RGBA")
-    r = v.get("cantos", 28)
-    margin = 70
-    if len(rows) == 1:
-        im = base
-        ratio = min((W - 2 * margin) / im.width, (H * 0.68) / im.height)
-        im = _polish(im.resize((round(im.width * ratio), round(im.height * ratio)), Image.LANCZOS))
-        boxes = [((W - im.width) // 2, (H - im.height) // 2 - 40, im)]
-    else:
-        n = len(rows)
-        cell_h = (H - 2 * 200 - (n - 1) * 24) // n
-        boxes = []
-        for i, row in enumerate(rows):
-            im = _polish(smart_fit(_load(row), (W - 2 * margin, cell_h)))
-            boxes.append((margin, 200 + i * (cell_h + 24), im))
-    for x, y, im in boxes:
-        shadow = Image.new("RGBA", (im.width + 60, im.height + 60), (0, 0, 0, 0))
-        ImageDraw.Draw(shadow).rounded_rectangle((30, 40, im.width + 30, im.height + 40), r, fill=(0, 0, 0, 110))
-        canvas.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(18)), (x - 30, y - 30))
-        canvas.alpha_composite(_round(im, r), (x, y))
+    canvas.alpha_composite(Image.new("RGBA", STORY, (*JR_FUNDO, 148)))
+
+    quadro = (54, 190, W - 54, 1310)
+    qw, qh = quadro[2] - quadro[0], quadro[3] - quadro[1]
     d = ImageDraw.Draw(canvas)
+    if len(rows) == 1:
+        # quadro do tamanho da foto (projeto em paisagem não ganha faixas pretas), centrado na área
+        im = _polish(base)
+        k = min(qw / im.width, qh / im.height)
+        im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+        px, py = quadro[0] + (qw - im.width) // 2, quadro[1] + (qh - im.height) // 2
+        d.rectangle((px - 10, py - 10, px + im.width + 10, py + im.height + 10), fill=(*JR_QUADRO, 255))
+        canvas.alpha_composite(im.convert("RGBA"), (px, py))
+    else:
+        d.rectangle(quadro, fill=(*JR_QUADRO, 255))
+        n, gap = len(rows), 14
+        ch = (qh - (n - 1) * gap) // n
+        for i, row in enumerate(rows):
+            im = _polish(smart_fit(_load(row), (qw, ch)))
+            canvas.alpha_composite(im.convert("RGBA"), (quadro[0], quadro[1] + i * (ch + gap)))
+
+    sombra = Image.new("RGBA", (1, 256))
+    for y in range(256):
+        a = 0 if y < 70 else int(min(1, (y - 70) / 186) ** 1.2 * 240)
+        sombra.putpixel((0, y), (*JR_FUNDO, a))
+    canvas.alpha_composite(sombra.resize((W, H - int(H * 0.47))), (0, int(H * 0.47)))
+
+    d = ImageDraw.Draw(canvas)
+    rotulo = "OBRAS CONCLUÍDAS" if do_site else "PRESTADORA DE SERVIÇOS"
+    fr = _font_peso(cfg, 18, "Bold")
+    d.rectangle((54, 58, 146 + d.textlength(rotulo, font=fr) + 26, 130), fill=(*JR_FUNDO, 190))
+    d.text((78, 70), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
+    d.text((146, 85), rotulo, font=fr, fill=(245, 243, 247))
+
+    x, y, larg = 62, 1372, W - 124
+    selo = selo or ("PROJETO CONCLUÍDO" if do_site else "NOSSO TRABALHO")
+    d.text((x, y), selo.upper(), font=_font_peso(cfg, 27, "Bold"), fill=JR_DOURADO)
+    y += 52
     if text:
-        f = _font(cfg, 58)
-        lines = _wrap(d, text, f, W - 2 * margin - 40)[:3]
-        lh = 72
-        y = H - 170 - lh * len(lines) if len(rows) == 1 else 70
-        for ln in lines:
-            tw = d.textlength(ln, font=f)
-            pad = 22
-            d.rounded_rectangle(((W - tw) / 2 - pad, y - 6, (W + tw) / 2 + pad, y + lh - 4), 16, fill=(255, 255, 255, 235))
-            d.text(((W - tw) / 2, y), ln, font=f, fill=(20, 20, 20))
-            y += lh
-    handle = cfg.get("perfil", {}).get("handle")
-    if handle:
-        f = _font(cfg, 34)
-        tw = d.textlength(handle, font=f)
-        d.text(((W - tw) / 2, H - 90), handle, font=f, fill=(255, 255, 255, 200))
-    if credito:  # arquiteto e fotógrafo do projeto, discreto no rodapé
-        f = _font(cfg, 30)
-        tw = d.textlength(credito, font=f)
-        d.text(((W - tw) / 2, H - 140), credito, font=f, fill=(255, 255, 255, 220))
+        f = _font_peso(cfg, 60, "ExtraBold")
+        linhas = _wrap(d, text, f, larg)
+        if len(linhas) > 2:
+            linhas = linhas[:2]
+            while linhas[1] and d.textlength(linhas[1] + "…", font=f) > larg:
+                linhas[1] = linhas[1][:-1]
+            linhas[1] = linhas[1].rstrip() + "…"
+        for ln in linhas:
+            d.text((x, y), ln, font=f, fill=(255, 255, 255))
+            y += 72
+    y += 18
+    f = _font_peso(cfg, 29, "SemiBold")
+    arq = c.get("arquiteto_txt") or c.get("arquiteto") or []
+    fot = c.get("fotografo_txt") or c.get("fotografo") or []
+    for rotulo, quem, cor in (("Arquitetura", arq, JR_CREME), ("Fotografia", fot, (216, 210, 196))):
+        if quem:
+            linha = f"{rotulo}: {' e '.join(quem)}"
+            while d.textlength(linha, font=f) > larg and len(linha) > 10:
+                linha = linha[:-2].rstrip() + "…"
+            d.text((x, y), linha, font=f, fill=cor)
+            y += 44
+    if credito and not (arq or fot):  # compatibilidade: crédito já pronto em texto
+        d.text((x, y), credito, font=f, fill=JR_CREME)
+    rodape = "Veja o álbum completo em jrobras.com" if do_site else cfg.get("perfil", {}).get("handle", "")
+    if rodape:
+        d.text((x, H - 205), rodape, font=_font_peso(cfg, 27, "SemiBold"), fill=(245, 243, 247))
     return canvas.convert("RGB")
 
 

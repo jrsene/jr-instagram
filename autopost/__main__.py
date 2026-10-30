@@ -128,7 +128,7 @@ def plan_day(db, cfg, day: date, log=print):
         if rows:
             anos = day.year - int(rows[0]["taken_at"][:4])
             f = out / "story_lembranca.jpg"
-            compose.story(rows, cfg, text=f"Há {anos} ano{'s' if anos > 1 else ''}…").save(f, quality=92)
+            compose.story(rows, cfg, text=f"Há {anos} ano{'s' if anos > 1 else ''}…", selo="Lembrança").save(f, quality=92)
             _save_post(db, cfg, f"{day}T{times[-1]}", "story", rows, [f], {"texto_story": f"Há {anos} anos", "legenda": "", "hashtags": [], "alt_text": ""})
             used |= {r["id"] for r in rows}
             log(f"  lembrança: foto de {rows[0]['taken_at'][:10]}")
@@ -141,8 +141,7 @@ def plan_day(db, cfg, day: date, log=print):
             break
         copy = captions.write(rows, cfg, "story", log=log)
         f = out / f"story_{i + 1}.jpg"
-        compose.story(rows, cfg, text=copy["texto_story"],
-                      credito=site.linha_creditos(site.creditos(rows)).replace("\n", " · ")).save(f, quality=92)
+        compose.story(rows, cfg, text=copy["texto_story"], creditos=site.creditos(rows)).save(f, quality=92)
         _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], copy)
         used |= {r["id"] for r in rows}
         log(f"  story {i + 1}: “{copy['texto_story']}”")

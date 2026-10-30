@@ -18,7 +18,7 @@ perfil:
     Profissional e próximo, com orgulho do trabalho bem feito. Frases curtas, sem exagero de emojis.
     Mostra o serviço (antes e depois, detalhes de acabamento, equipe trabalhando) e, quando fizer
     sentido, termina chamando para pedir orçamento pelo WhatsApp do link na bio.
-  hashtags_fixas: []               # ex: ["#fotografia", "#minhacidade"]
+  hashtags_fixas: ["#apucarana", "#londrina"]   # região da JR (mesmas tags do carrossel do JR OS)
   max_hashtags: 8
 
 # Pastas de onde vêm as fotos e vídeos (pode ter subpastas).
