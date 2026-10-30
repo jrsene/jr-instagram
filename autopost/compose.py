@@ -1,5 +1,6 @@
 """Gera as peças visuais: foto de feed, montagens, carrossel, stories e reels."""
 import random
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -123,6 +124,7 @@ JR_DOURADO = (201, 162, 75)    # #C9A24B
 JR_CREME = (233, 210, 160)     # #E9D2A0
 JR_FUNDO = (7, 6, 10)
 JR_QUADRO = (16, 13, 18)       # #100D12
+_SEM_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3]")
 
 
 def _font_peso(cfg, size, peso="Bold"):
@@ -188,16 +190,21 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
     d.text((x, y), selo.upper(), font=_font_peso(cfg, 27, "Bold"), fill=JR_DOURADO)
     y += 52
     if text:
+        # a fonte não tem emoji (sairia um quadrado "NO GLYPH"): tira emoji e símbolos soltos
+        text = re.sub(r"\s+", " ", _SEM_EMOJI.sub("", text)).strip(" -–—·|")
         f = _font_peso(cfg, 60, "ExtraBold")
         linhas = _wrap(d, text, f, larg)
-        if len(linhas) > 2:
-            linhas = linhas[:2]
-            while linhas[1] and d.textlength(linhas[1] + "…", font=f) > larg:
-                linhas[1] = linhas[1][:-1]
-            linhas[1] = linhas[1].rstrip() + "…"
+        if len(linhas) > 2:  # texto mais longo: fonte menor e até 3 linhas antes de cortar
+            f = _font_peso(cfg, 50, "ExtraBold")
+            linhas = _wrap(d, text, f, larg)
+        if len(linhas) > 3:
+            linhas = linhas[:3]
+            while linhas[-1] and d.textlength(linhas[-1] + "…", font=f) > larg:
+                linhas[-1] = linhas[-1][:-1]
+            linhas[-1] = linhas[-1].rstrip() + "…"
         for ln in linhas:
             d.text((x, y), ln, font=f, fill=(255, 255, 255))
-            y += 72
+            y += round(f.size * 1.2)
     y += 18
     f = _font_peso(cfg, 29, "SemiBold")
     arq = c.get("arquiteto_txt") or c.get("arquiteto") or []
