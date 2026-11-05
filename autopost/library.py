@@ -211,14 +211,29 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
     if not rows:
         return []
     if group_by_day:
+        # Rotação entre álbuns: o álbum publicado há mais tempo (ou nunca publicado, inclusive álbum novo
+        # que apareceu na galeria) vai primeiro. Só depois desempata por uso e nota.
+        ultimo: dict[str, str] = {}
+        for r in db.execute("select album, taken_at, added_at, last_used from media where kind=? and ok=1 and last_used is not null",
+                            (kind,)):
+            k = _album_de(r)
+            ultimo[k] = max(ultimo.get(k, ""), r["last_used"])
         days: dict[str, list] = {}
         for r in rows:
-            days.setdefault(r["album"] or (r["taken_at"] or r["added_at"] or "")[:10], []).append(r)  # álbum do site = mesma obra
+            days.setdefault(_album_de(r), []).append(r)  # álbum do site = mesma obra
         full = [g for g in days.values() if len(g) >= n]
-        if full:
-            best = max(full, key=lambda g: (-min(x["used_count"] for x in g), bool(g[0]["album"]), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
-            return sorted(best, key=lambda r: -r["score"])[:n]
+        if not full:
+            return []  # nenhum álbum com fotos boas suficientes neste ciclo: pula, não mistura
+        best = min(full, key=lambda g: (ultimo.get(_album_de(g[0]), ""), not g[0]["album"],
+                                        min(x["used_count"] for x in g),
+                                        -sum(sorted((x["score"] for x in g), reverse=True)[:n])))
+        return sorted(best, key=lambda r: -r["score"])[:n]
     return rows[:n]
+
+
+def _album_de(r) -> str:
+    """Chave do álbum: o álbum do site, ou o dia da foto para o resto (câmera, pastas)."""
+    return r["album"] or (r["taken_at"] or r["added_at"] or "")[:10]
 
 
 def mark_used(db, ids):

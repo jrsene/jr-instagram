@@ -66,7 +66,7 @@ def plan_day(db, cfg, day: date, log=print):
             when = f"{day}T{hr.get('feed', '18:30')}"
             rows, files, copy = [], [], None
             if kind == "foto":
-                rows = library.pick(db, cfg, 1)
+                rows = library.pick(db, cfg, 1, group_by_day=True)  # alterna o álbum a cada post
                 if rows:
                     files = [out / "feed.jpg"]
                     compose.single(rows[0], cfg).save(files[0], quality=93)
@@ -135,7 +135,9 @@ def plan_day(db, cfg, day: date, log=print):
 
     for i in range(ag.get("stories", 0) or 0):
         n = 1 if (seed + i) % 3 else 2
-        rows = library.pick(db, cfg, n, group_by_day=n > 1, exclude=used, nota="nota_stories")
+        rows = library.pick(db, cfg, n, group_by_day=True, exclude=used, nota="nota_stories")
+        if not rows and n > 1:  # sem álbum com 2 fotos boas: o story sai com uma só
+            rows = library.pick(db, cfg, 1, group_by_day=True, exclude=used, nota="nota_stories")
         if not rows:
             log("  story: sem mídia nova, pulando")
             break
