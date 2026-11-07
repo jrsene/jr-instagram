@@ -84,10 +84,12 @@ def plan_day(db, cfg, day: date, log=print):
                         im.save(f, quality=93)
                         files.append(f)
             elif kind == "reel":
-                vids = library.pick(db, cfg, 1, kind="video")
+                vids = library.pick(db, cfg, 1, kind="video", nota="nota_stories")
                 if vids:
                     rows = vids
-                    files = [compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log)]
+                    copy = captions.write(rows, cfg, "reel", log=log)  # legenda e título do reel saem antes do vídeo
+                    files = [compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
+                                                texto=copy.get("texto_story"), creditos=site.creditos(vids))]
                 else:
                     rows = library.pick(db, cfg, 6, group_by_day=True)
                     if len(rows) >= 3:

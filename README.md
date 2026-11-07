@@ -8,13 +8,15 @@ Pega todas as suas fotos e vídeos, escolhe as melhores, monta posts, montagens,
 0b. **Google Drive** (`autopost/drive.py`): baixa fotos e vídeos novos das pastas listadas em `drive.pastas`.
 1. **Catálogo** (`autopost/library.py`): tudo que cair nas pastas de `fontes` (padrão `inbox/`) é catalogado. Lê JPG, PNG, HEIC (iPhone), DNG (RAW) e MP4/MOV. Cada foto ganha uma nota de qualidade (nitidez e exposição), e as borradas ou escuras ficam de fora.
 1b. **Curadoria com IA** (`autopost/curate.py`): o Claude olha cada foto nova e reprova prints, documentos, fotos acidentais, borradas ou íntimas, e marca tags (praia, amigos, comida…). Dá para adicionar critérios seus em `curadoria.extra`.
-2. **Escolha**: prioriza fotos novas e nunca usadas, não repete a mesma foto antes de 45 dias e, para montagens e carrosséis, junta fotos do mesmo dia (mesmo rolê). Se faltar conteúdo inédito, reaproveita o que foi usado há mais tempo.
+2. **Escolha**: prioriza fotos novas e nunca usadas, não repete a mesma foto antes de 45 dias e, para montagens e carrosséis, junta fotos do mesmo dia (mesmo rolê). Se faltar conteúdo inédito, reaproveita o que foi usado há mais tempo. Alterna obras: a obra das últimas `regras.alternar_ultimas` postagens só volta se não houver outra (ver `alternar_obras`).
 3. **Montagem** (`autopost/compose.py`):
    - feed em 4:5 (1080×1350) com recorte inteligente, que procura onde está o assunto em vez de cortar sempre no centro;
    - montagens com 2 a 6 fotos em vários layouts, com a melhor foto na célula maior;
    - carrossel com capa em montagem e as fotos depois;
    - story 9:16 com fundo desfocado, cantos arredondados, sombra e frase curta;
-   - reel feito de fotos (zoom suave, transições e música opcional de `assets/music/`) ou a partir dos seus vídeos.
+   - reel feito de fotos (zoom suave, transições e música opcional de `assets/music/`) ou a partir dos seus vídeos;
+   - **vídeo tratado** (`compose.video_reel`, precisa de `ffmpeg`): com fala, corta as pausas, limpa o chiado, legenda cada palavra e põe a trilha por baixo; sem fala, o som cru da obra (máquina, ambiente) sai e entra a trilha. Vídeo curto ganha câmera lenta leve (até 1,6x) e quadro parado no fim para chegar a `video.duracao_min` (8 s). Sempre entram tratamento de cor, fade e um título gráfico com o selo JR;
+   - trilha: uma música de `assets/music/*.mp3` (escolhida por vídeo, em loop). Sem mp3 nessa pasta, entra um fundo sintético suave, gerado pelo próprio ffmpeg. Para trilhas de verdade, coloque mp3 livres de direitos nessa pasta.
 4. **Legenda** (`autopost/captions.py`): o Claude olha as fotos e escreve a legenda, as hashtags, a frase do story e o texto alternativo no tom definido em `config.yaml`. Sem chave de API, usa frases prontas.
 5. **Publicação** (`autopost/publisher.py`): usa a API oficial do Instagram, então não há risco de bloqueio por automação.
 

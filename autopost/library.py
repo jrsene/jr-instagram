@@ -177,7 +177,9 @@ def ingest(root: Path, cfg: dict, log=print) -> int:
                                     "scale='if(gt(iw,ih),-2,min(1080,iw))':'if(gt(iw,ih),min(1080,ih),-2)'",
                                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac",
                                     "-movflags", "+faststart", str(cache_dir / f"{fid}.mp4")], check=True)
-                    row = (fid, str(p), "video", _taken_at(p, None), w, h, dur, 0.7, str(cache))
+                    # nota do vídeo = nitidez/exposição do quadro escolhido (antes ficava fixa em 0.7 e nunca passava da régua)
+                    row = (fid, str(p), "video", _taken_at(p, None), w, h, dur,
+                           quality(Image.open(cache).convert("RGB")), str(cache))
             except Exception as e:  # arquivo corrompido etc.
                 log(f"  ! ignorado {p.name}: {e}")
                 continue
@@ -191,11 +193,30 @@ def ingest(root: Path, cfg: dict, log=print) -> int:
     return added
 
 
+def chave_obra(r) -> str:
+    """Obra = álbum do site; sem álbum, o dia em que a foto foi tirada (mesmo evento)."""
+    return r["album"] or (r["taken_at"] or r["added_at"] or "")[:10]
+
+
+def obras_recentes(db, n: int = 2) -> set:
+    """Obras das últimas n postagens (feed ou story): a próxima postagem puxa de outra obra."""
+    ids: list = []
+    for (m,) in db.execute("select media_ids from posts where status in ('publicado','pronto','aprovado','pendente','rascunho')"
+                           " order by scheduled_for desc, id desc limit ?", (max(1, n),)):
+        ids += json.loads(m or "[]")
+    if not ids:
+        return set()
+    rows = db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids).fetchall()
+    return {chave_obra(r) for r in rows if chave_obra(r)}
+
+
 def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False, exclude=(), nota: str = "nota_feed") -> list[sqlite3.Row]:
     """Escolhe n mídias: as melhores ainda não usadas primeiro, respeitando o intervalo de repetição.
     `nota` é a regra de nota mínima (nota_feed ou nota_stories); foto abaixo dela nunca sai.
-    Com group_by_day, tenta pegar fotos do mesmo dia (mesmo evento) para montagens coerentes."""
+    Com group_by_day, tenta pegar fotos do mesmo dia (mesmo evento) para montagens coerentes.
+    Alterna obras: a obra das últimas `regras.alternar_ultimas` postagens só volta se não houver outra."""
     rules = cfg.get("regras", {})
+    evitar = obras_recentes(db, rules.get("alternar_ultimas", 2)) if rules.get("alternar_obras", True) else set()
     cutoff = (datetime.now() - timedelta(days=rules.get("nao_repetir_por_dias", 45))).isoformat()
     minimo = max(rules.get("qualidade_minima", 0.25), rules.get(nota, 0.75 if nota == "nota_feed" else 0.6))
     rows = [r for r in db.execute(
@@ -213,11 +234,15 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
     if group_by_day:
         days: dict[str, list] = {}
         for r in rows:
-            days.setdefault(r["album"] or (r["taken_at"] or r["added_at"] or "")[:10], []).append(r)  # álbum do site = mesma obra
+            days.setdefault(chave_obra(r), []).append(r)  # álbum do site = mesma obra
         full = [g for g in days.values() if len(g) >= n]
+        novas = [g for g in full if chave_obra(g[0]) not in evitar]
+        full = novas or full
         if full:
             best = max(full, key=lambda g: (-min(x["used_count"] for x in g), bool(g[0]["album"]), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
             return sorted(best, key=lambda r: -r["score"])[:n]
+    if evitar:  # sem agrupar: as obras de fora da alternância vêm primeiro
+        rows = [r for r in rows if chave_obra(r) not in evitar] + [r for r in rows if chave_obra(r) in evitar]
     return rows[:n]
 
 
