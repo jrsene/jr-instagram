@@ -3,6 +3,7 @@ faster-whisper) e separa a voz do fundo com demucs, nos clipes de tests/audio_sp
 Roda no GitHub Actions pelo workflow 'teste-audio' (manual). Não publica nada."""
 import json
 import subprocess
+import traceback
 import sys
 import time
 from pathlib import Path
@@ -19,7 +20,8 @@ def tempo(nome, fn):
         r = fn()
         relatorio[nome] = {"segundos": round(time.time() - t, 1), **(r or {})}
     except Exception as e:  # um teste quebrado não derruba os outros
-        relatorio[nome] = {"erro": f"{type(e).__name__}: {str(e)[:300]}", "segundos": round(time.time() - t, 1)}
+        relatorio[nome] = {"erro": f"{type(e).__name__}: {str(e)[:300]}", "rastro": traceback.format_exc()[-1500:],
+                           "segundos": round(time.time() - t, 1)}
     print(nome, relatorio[nome], flush=True)
 
 
