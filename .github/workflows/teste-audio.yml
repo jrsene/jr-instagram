@@ -17,7 +17,7 @@ jobs:
         with: {python-version: "3.12", cache: pip}
       - name: instala as ferramentas de teste
         run: |
-          pip install -q stable-ts faster-whisper pydub
+          pip install -q "huggingface_hub==0.26.5" "faster-whisper==1.1.1" stable-ts pydub
           pip install -q --extra-index-url https://download.pytorch.org/whl/cpu torch torchaudio
           pip install -q demucs
       - name: gera os clipes (com fala e só com máquina)
