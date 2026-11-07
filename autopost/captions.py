@@ -13,19 +13,20 @@ from . import library
 class Copy(BaseModel):
     legenda: str          # legenda do post (sem hashtags)
     hashtags: list[str]   # hashtags relevantes, com '#'
-    texto_story: str      # frase curta (até ~8 palavras) para colocar em cima do story
-    alt_text: str         # descrição acessível da imagem
+    texto_story: str      # frase curta (até 6 palavras, sem ponto final) para colocar em cima do story
+    alt_text: str         # descrição objetiva da imagem, sem adjetivo de propaganda
     narracao: str = ""    # só para reels: 1 a 2 frases faladas em primeira pessoa (narração com a voz dele)
 
 
+# Legendas de reserva (quando não há IA). Sóbrias, sem bordão, sem pergunta, sem emoji.
 FALLBACK = [
-    "Guardando esse momento por aqui.",
-    "Pequenos recortes de dias bons.",
-    "Do jeito que foi, sem filtro de humor.",
-    "Mais um capítulo pra coleção.",
-    "Quando a vida acontece, a gente registra.",
+    "Luz, material e acabamento no lugar certo.",
+    "Espaço pensado até o último detalhe.",
+    "Obra concluída com cuidado em cada etapa.",
+    "Simplicidade que exige precisão.",
+    "Um projeto, do começo ao acabamento.",
 ]
-FALLBACK_STORY = ["Bom dia por aqui", "Olha isso", "Recortes da semana", "Momento do dia", "Você já viu?"]
+FALLBACK_STORY = ["Obra concluída", "Detalhe de acabamento", "Execução com precisão", "Projeto entregue", "Arquitetura e execução"]
 
 
 def _b64(path, size=768) -> str:
@@ -45,7 +46,7 @@ def _contexto(rows) -> str:
     txt = "; ".join(f"{a['album']}: {a['descricao']}".strip(": ") for a in c["albuns"])
     quem = " e ".join(c["nomes_arquitetos"])
     return (f"Projeto: {txt}. " + (f"Projeto de arquitetura de {quem}. " if quem else "") +
-            "Pode citar o nome do projeto e agradecer a parceria com a arquitetura; os créditos com @ já entram "
+            "Pode citar o nome do projeto, sem agradecimentos genéricos; os créditos com @ já entram "
             "sozinhos no fim da legenda, então não escreva @ nem repita os créditos.\n")
 
 
@@ -61,15 +62,23 @@ def write(rows, cfg, formato: str, log=print) -> dict:
             content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                                                      "data": _b64(library.local(r))}} for r in rows[:6]]
             content.append({"type": "text", "text": (
-                f"Você cuida do Instagram {perfil.get('handle', '')}. Idioma: {perfil.get('idioma', 'pt-BR')}.\n"
+                f"Você escreve as legendas do Instagram {perfil.get('handle', '')}. Idioma: {perfil.get('idioma', 'pt-BR')}.\n"
                 f"Tom de voz: {perfil.get('voz', '')}\n"
                 f"Formato do post: {formato}. As imagens acima vão juntas nesse post.\n"
                 + _contexto(rows) +
-                "Escreva uma legenda curta e natural (1 a 3 frases, pode ter uma pergunta para engajar), "
-                f"até {maxh} hashtags específicas ao que aparece (nada genérico tipo #love), "
-                "um texto bem curto para o story e um alt text descritivo. "
-                + ("Como é um reel, escreva também a narração: 1 ou 2 frases curtas, faladas em primeira pessoa, "
-                   "naturais como alguém contando o momento para um amigo (até ~12 segundos de fala). "
+                "Escreva como um escritório de arquitetura de alto padrão escreveria: sóbrio, preciso, sem exagero.\n"
+                "Regras:\n"
+                "- Legenda: 1 ou 2 frases curtas descrevendo o que se vê (espaço, luz, material, acabamento, execução).\n"
+                "- Não use bordão nem clichê. Evite: 'bora', 'arrasou', 'sonho realizado', 'espaço dos sonhos', "
+                "'transformação', 'qualidade que faz a diferença', 'não é só X, é Y', 'a gente registra', "
+                "'momento', 'dias bons'.\n"
+                "- Sem ponto de exclamação, sem emoji, sem pergunta para engajar, sem pedir para comentar.\n"
+                f"- Hashtags: até {maxh}, específicas ao que aparece (ex.: marcenaria, iluminação, porcelanato). "
+                "Nada genérico (#love, #instagood, #viral).\n"
+                "- Texto do story: até 6 palavras, sem ponto final.\n"
+                "- Alt text: descrição objetiva do que aparece na imagem, sem adjetivo de propaganda.\n"
+                + ("- Reel: também escreva a narração, 1 ou 2 frases curtas em primeira pessoa, tranquilas, "
+                   "como quem descreve o momento sem pressa (até ~12 segundos de fala).\n"
                    if "reel" in formato else "") +
                 "Não invente nomes de lugares ou pessoas que não dá para ver nas fotos, "
                 "e não cite dia da semana nem data.")})

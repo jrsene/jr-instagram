@@ -15,11 +15,12 @@ perfil:
   # Descreva o tom do perfil. A IA usa isso para escrever as legendas.
   voz: >
     Perfil da JR Prestadora de Serviços (obras, reformas, elétrica, automação e acabamentos).
-    Profissional e próximo, com orgulho do trabalho bem feito. Frases curtas, sem exagero de emojis.
-    Mostra o serviço (antes e depois, detalhes de acabamento, equipe trabalhando) e, quando fizer
-    sentido, termina chamando para pedir orçamento pelo WhatsApp do link na bio.
+    Tom luxuoso e minimalista: sóbrio, preciso, com poucas palavras. Sem exclamação, sem emoji,
+    sem bordão e sem clichê. Fala do projeto e da execução (espaço, luz, material, acabamento),
+    como um escritório de alto padrão. Quando fizer sentido, uma única frase discreta sobre
+    orçamento, sem insistir.
   hashtags_fixas: ["#apucarana", "#londrina"]   # região da JR (mesmas tags do carrossel do JR OS)
-  max_hashtags: 8
+  max_hashtags: 3                # hashtags específicas além das fixas (total de até 5)
 
 # Pastas de onde vêm as fotos e vídeos (pode ter subpastas).
 # Tudo que cair aqui é catalogado automaticamente.
