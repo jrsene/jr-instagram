@@ -1,0 +1,39 @@
+# Teste de bancada, só manual: compara transcrição com tempo por palavra (stable-ts x faster-whisper)
+# e separação de voz com demucs nos clipes de tests/audio_spike/. Não publica nada e não usa segredos.
+name: teste-audio
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: ffmpeg e voz sintética em português
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg espeak-ng
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - name: instala as ferramentas de teste
+        run: |
+          pip install -q stable-ts faster-whisper pydub
+          pip install -q --extra-index-url https://download.pytorch.org/whl/cpu torch torchaudio
+          pip install -q demucs
+      - name: gera os clipes (com fala e só com máquina)
+        run: |
+          mkdir -p tests/audio_spike/clipes
+          espeak-ng -v pt-br -s 150 -w /tmp/fala.wav "Essa obra ficou muito bonita. O acabamento do piso e da parede ficou perfeito." 
+          ffmpeg -v error -y -i /tmp/fala.wav -ar 16000 -ac 1 /tmp/fala16.wav
+          # fala sobre ruído de máquina: 8 s de ruído marrom com o trecho de fala no meio
+          ffmpeg -v error -y -f lavfi -i "anoisesrc=color=brown:amplitude=0.25:d=12" -i /tmp/fala16.wav \
+            -filter_complex "[1:a]adelay=2000|2000,volume=1.5[f];[0:a][f]amix=inputs=2:duration=first:normalize=0" \
+            -ar 16000 -ac 1 tests/audio_spike/clipes/fala_com_maquina.wav
+          ffmpeg -v error -y -f lavfi -i "anoisesrc=color=brown:amplitude=0.25:d=8" -ar 16000 -ac 1 \
+            tests/audio_spike/clipes/so_maquina.wav
+      - name: roda os testes
+        run: python tests/audio_spike/testar.py "$RUNNER_TEMP/resultados"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resultados-teste-audio
+          path: ${{ runner.temp }}/resultados
