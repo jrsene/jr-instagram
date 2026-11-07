@@ -9,4 +9,6 @@ anthropic>=1.15
 google-api-python-client
 google-auth
 cryptography
-faster-whisper
+faster-whisper==1.1.1
+av==12.3.0
+huggingface_hub==0.26.5
