@@ -97,13 +97,20 @@ regras:
   qualidade_minima: 0.25           # 0-1, descarta fotos borradas/escuras
   nota_feed: 0.75                  # 0-1, nota mínima da IA para ir ao feed (portfólio)
   nota_stories: 0.6                # 0-1, nota mínima para stories
+  alternar_obras: true             # o post seguinte puxa de outra obra (álbum do site ou dia da foto)
+  alternar_ultimas: 2              # obras das últimas N postagens não se repetem enquanto houver outra
+
+# Seus vídeos viram reel tratado: fala (legenda no tempo de cada palavra) ou, sem fala, trilha no lugar do som cru.
+video:
+  duracao_min: 8                   # segundos; vídeo mais curto ganha câmera lenta leve e quadro parado no fim
+  duracao_max: 30
 
 visual:
   fundo: "#F4EFE8"                 # cor de fundo das montagens
   espaco: 14                       # espaço entre fotos (px)
   cantos: 28                       # arredondamento nos stories
   fonte: "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
-  musica_pasta: assets/music       # mp3 opcionais para os reels
+  musica_pasta: assets/music       # mp3 para os reels e vídeos (sem mp3, entra um fundo sintético suave)
 
 ia:
   legendas: true                   # usa Claude (precisa ANTHROPIC_API_KEY)

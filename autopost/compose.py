@@ -1,4 +1,5 @@
 """Gera as peças visuais: foto de feed, montagens, carrossel, stories e reels."""
+import hashlib
 import random
 import re
 import subprocess
@@ -6,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from . import library
+from . import edicao, library
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance
 
 FEED = (1080, 1350)   # 4:5, o formato que mais ocupa a tela no feed
@@ -299,29 +300,127 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
     return out
 
 
-def video_reel(row, out: Path, max_s=30, cfg=None, log=print) -> Path:
-    """Vídeo seu → Reel 9:16 (corta no máximo max_s e preenche com fundo desfocado se for horizontal).
-    Se tiver fala, corta as pausas e coloca legenda no tempo de cada palavra."""
+def _overlay_video(texto: str | None, creditos: dict | None, cfg: dict, falado: bool) -> Image.Image:
+    """Camada 9:16 transparente por cima do vídeo: selo JR no alto, e embaixo o título gráfico (quando não há
+    fala, pois com fala a legenda ocupa o lugar) e o rodapé com o convite para o álbum ou o @ do perfil."""
     W, H = STORY
-    vf = (f"split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg];"
-          f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,format=yuv420p")
+    c = creditos or {}
+    do_site = bool(c.get("albuns") or c.get("arquiteto") or c.get("fotografo"))
+    im = Image.new("RGBA", STORY, (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    sombra = Image.new("RGBA", (1, 256))
+    for y in range(256):
+        a = 0 if y < 70 else int(min(1, (y - 70) / 186) ** 1.2 * 210)
+        sombra.putpixel((0, y), (*JR_FUNDO, a))
+    im.alpha_composite(sombra.resize((W, H - int(H * 0.47))), (0, int(H * 0.47)))
+    rotulo = "OBRAS CONCLUÍDAS" if do_site else "PRESTADORA DE SERVIÇOS"
+    fr = _font_peso(cfg, 18, "Bold")
+    d.rectangle((54, 58, 146 + d.textlength(rotulo, font=fr) + 26, 130), fill=(*JR_FUNDO, 190))
+    d.text((78, 70), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
+    d.text((146, 85), rotulo, font=fr, fill=(245, 243, 247))
+    x, larg, y = 62, W - 124, 1372
+    if texto and not falado:
+        d.text((x, y), ("PROJETO CONCLUÍDO" if do_site else "NOSSO TRABALHO"), font=_font_peso(cfg, 27, "Bold"), fill=JR_DOURADO)
+        y += 52
+        t = re.sub(r"\s+", " ", _SEM_EMOJI.sub("", texto)).strip(" -–—·|")
+        f = _font_peso(cfg, 60, "ExtraBold")
+        linhas = _wrap(d, t, f, larg)
+        if len(linhas) > 3:
+            linhas = linhas[:3]
+            while linhas[-1] and d.textlength(linhas[-1] + "…", font=f) > larg:
+                linhas[-1] = linhas[-1][:-1]
+            linhas[-1] = linhas[-1].rstrip() + "…"
+        for ln in linhas:
+            d.text((x, y), ln, font=f, fill=(255, 255, 255))
+            y += round(f.size * 1.2)
+        y += 18
+        f = _font_peso(cfg, 29, "SemiBold")
+        for rotulo2, quem, cor in (("Arquitetura", c.get("arquiteto_txt") or c.get("arquiteto") or [], JR_CREME),
+                                   ("Fotografia", c.get("fotografo_txt") or c.get("fotografo") or [], (216, 210, 196))):
+            if quem:
+                linha = f"{rotulo2}: {' e '.join(quem)}"
+                while d.textlength(linha, font=f) > larg and len(linha) > 10:
+                    linha = linha[:-2].rstrip() + "…"
+                d.text((x, y), linha, font=f, fill=cor)
+                y += 44
+    rodape = "Veja o álbum completo em jrobras.com" if do_site else cfg.get("perfil", {}).get("handle", "")
+    if rodape:
+        d.text((x, H - 205), rodape, font=_font_peso(cfg, 27, "SemiBold"), fill=(245, 243, 247))
+    return im
+
+
+def _trilha(cfg, seed: int, T: float, volume: float):
+    """Trilha para o reel: uma música de assets/music (em loop) ou, se a pasta estiver vazia,
+    um fundo sintético suave (acorde grave com leve tremolo). Devolve (entradas do ffmpeg, filtro até [2:a])."""
+    pasta = library.ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")
+    mp3 = sorted(pasta.glob("*.mp3")) if pasta.exists() else []
+    if mp3:
+        return (["-stream_loop", "-1", "-i", str(mp3[seed % len(mp3)])],
+                f"[2:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
+    return (["-f", "lavfi", "-i", f"aevalsrc=0.16*sin(2*PI*110*t)+0.10*sin(2*PI*164.81*t)"
+                                  f"+0.07*sin(2*PI*220*t)+0.05*sin(2*PI*277.18*t):s=44100:d={T:.2f}"],
+            f"[2:a]lowpass=f=1400,tremolo=f=0.2:d=0.2,volume={volume}")
+
+
+def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None = None,
+               creditos: dict | None = None) -> Path:
+    """Vídeo seu → Reel 9:16 tratado.
+    - Com fala: corta as pausas, legenda no tempo de cada palavra, limpa o chiado e põe a trilha por baixo.
+    - Sem fala: o som cru da obra (máquina, ambiente) sai e entra a trilha; vídeo curto ganha câmera lenta
+      leve (até 1,6x) e quadro parado no fim para chegar ao mínimo de duração.
+    - Sempre: tratamento de cor, entrada e saída suaves e um título gráfico (ou a legenda) com o selo JR."""
+    W, H = STORY
+    cfg = cfg or {}
+    vc, ec = cfg.get("video", {}) or {}, cfg.get("edicao", {}) or {}
+    max_s = vc.get("duracao_max", max_s)
+    min_s = float(vc.get("duracao_min", 8))
     src = library.local(row, video=True)
-    ec = (cfg or {}).get("edicao", {})
-    if cfg is not None and ec.get("cortar_pausas", True):
-        from . import edicao
-        words = [w for w in edicao.transcrever(src, cfg, log=log) if w[0] < max_s]
-        if len(words) >= 4:
-            trechos = edicao.trechos_com_fala(words, min(max_s, edicao.duracao(src)), pausa=ec.get("pausa_max", 0.6))
-            novo = edicao.remapear(words, trechos)
-            with tempfile.TemporaryDirectory() as td:
-                vf2 = vf
-                if ec.get("legenda_fala", True):
-                    ass = edicao.legenda_ass(novo, Path(td) / "fala.ass", (W, H))
-                    vf2 = vf.replace(",format=yuv420p", f",subtitles='{ass}',format=yuv420p")
-                edicao.cortar(src, out, trechos, vf2)
-            log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
-            return out
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", str(max_s), "-filter_complex", vf,
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-movflags", "+faststart",
-                    str(out)], check=True)
+    seed = int(hashlib.sha1(str(row["id"]).encode()).hexdigest()[:8], 16)
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td) / "base.mp4"
+        falado, novo = False, []
+        if ec.get("cortar_pausas", True):
+            words = [w for w in edicao.transcrever(src, cfg, log=log) if w[0] < max_s]
+            if len(words) >= 4:
+                falado = True
+                trechos = edicao.trechos_com_fala(words, min(max_s, edicao.duracao(src)), pausa=ec.get("pausa_max", 0.6))
+                novo = edicao.remapear(words, trechos)
+                edicao.cortar(src, base, trechos, "null")
+                log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
+        if not falado:  # sem fala: o som do ambiente sai
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", str(max_s), "-an", "-c:v", "libx264",
+                            "-preset", "veryfast", "-crf", "20", "-movflags", "+faststart", str(base)], check=True)
+        L = edicao.duracao(base)
+        F = 1.0 if falado or L >= min_s else min(1.6, min_s / L)
+        T = max(min_s, L * F)
+        pad = round(T - L * F, 2)
+        log(f"  reel: {T:.1f}s ({'com fala' if falado else 'sem fala, com trilha'})")
+
+        png = Path(td) / "sobreposicao.png"
+        _overlay_video(texto, creditos, cfg, falado).save(png)
+        trilha_in, trilha_f = _trilha(cfg, seed, T, volume=0.22 if falado else 0.9)
+
+        segs = [f"[0:v]setpts={F:.4f}*PTS" + (f",tpad=stop_mode=clone:stop_duration={pad:.2f}" if pad > 0.05 else "")
+                + ",split[a][b]",
+                f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg]",
+                f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease,eq=contrast=1.05:saturation=1.1[fg]",
+                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,fade=t=in:st=0:d=0.5,fade=t=out:st={T - 0.7:.2f}:d=0.7[v0]",
+                "[v0][1:v]overlay=0:0[v1]"]
+        if falado and ec.get("legenda_fala", True):
+            ass = edicao.legenda_ass(novo, Path(td) / "fala.ass", (W, H))
+            segs.append(f"[v1]subtitles='{ass}',format=yuv420p[vo]")
+        else:
+            segs.append("[v1]format=yuv420p[vo]")
+        if falado:
+            segs += [f"[0:a]apad,atrim=0:{T:.2f},highpass=f=120,lowpass=f=8000,afftdn=nf=-30,volume=1.2[va]",
+                     f"{trilha_f}[m]",
+                     f"[va][m]amix=inputs=2:duration=first:normalize=0,afade=t=in:d=0.5,"
+                     f"afade=t=out:st={T - 1.2:.2f}:d=1.2[ao]"]
+        else:
+            segs += [f"{trilha_f}[m]", f"[m]afade=t=in:d=0.5,afade=t=out:st={T - 1.2:.2f}:d=1.2[ao]"]
+        cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(base), "-loop", "1", "-i", str(png), *trilha_in,
+               "-filter_complex", ";".join(segs), "-map", "[vo]", "-map", "[ao]", "-t", f"{T:.2f}",
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+               "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out)]
+        subprocess.run(cmd, check=True)
     return out
