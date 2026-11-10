@@ -400,6 +400,9 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
         L = edicao.duracao(base)
         F = 1.0 if falado or L >= min_s else min(1.6, min_s / L)
         T = max(min_s, L * F)
+        if T < float(vc.get("duracao_reel", 30)):  # reel pequeno não sai: sem conteúdo para 30 s
+            log(f"  só {T:.1f} s de conteúdo; reel precisa de {vc.get('duracao_reel', 30)} s: não sai")
+            return None
         pad = round(T - L * F, 2)
         log(f"  reel: {T:.1f}s ({'com fala' if falado else 'sem fala, com trilha'})")
 

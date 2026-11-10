@@ -88,8 +88,9 @@ def plan_day(db, cfg, day: date, log=print):
                 if vids:
                     rows = vids
                     copy = captions.write(rows, cfg, "reel", log=log)  # legenda e título do reel saem antes do vídeo
-                    files = [compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
-                                                texto=copy.get("texto_story"), creditos=site.creditos(vids))]
+                    reel = compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
+                                              texto=copy.get("texto_story"), creditos=site.creditos(vids))
+                    files = [reel] if reel else []  # vídeo curto não vira reel
                 else:
                     rows = library.pick(db, cfg, 6, group_by_day=True)
                     if len(rows) >= 3:
