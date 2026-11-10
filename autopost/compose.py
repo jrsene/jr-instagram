@@ -386,7 +386,14 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
                 trechos = edicao.trechos_com_fala(words, min(max_s, edicao.duracao(src)), pausa=ec.get("pausa_max", 0.6))
                 novo = edicao.remapear(words, trechos)
                 edicao.cortar(src, base, trechos, "null")
-                log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
+                if edicao.duracao(base) < min_s:
+                    # corte curto demais: usa o clipe inteiro, em vez de congelar o último quadro até o mínimo
+                    trechos = [(0.0, min(max_s, edicao.duracao(src)))]
+                    novo = list(words)
+                    edicao.cortar(src, base, trechos, "null")
+                    log("  edição: fala curta demais para cortar; usando o clipe inteiro")
+                else:
+                    log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
         if not falado:  # sem fala: o som do ambiente sai
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", str(max_s), "-an", "-c:v", "libx264",
                             "-preset", "veryfast", "-crf", "20", "-movflags", "+faststart", str(base)], check=True)
