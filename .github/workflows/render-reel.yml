@@ -1,0 +1,26 @@
+# Teste de bancada, só manual: renderiza reels com o motor de vídeo de produção (transcrição real)
+# a partir de clipes sintéticos. Não publica nada no Instagram e não usa segredos.
+name: render-reel
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: ffmpeg, voz sintética e fontes
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg espeak-ng fonts-inter
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - name: dependências de produção
+        run: pip install -r requirements.txt
+      - name: renderiza os reels de teste
+        run: python tests/render_reel/render.py "$RUNNER_TEMP/reels"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reels-teste
+          path: ${{ runner.temp }}/reels
