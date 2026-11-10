@@ -32,7 +32,7 @@ def main(saida: str) -> int:
     total = db.execute("select count(*) from media").fetchone()[0]
     resultado["etapas"].append({"galeria_sincronizada": novas, "midias_no_catalogo": total})
 
-    rows = library.pick(db, cfg, 14, group_by_day=True)
+    rows = library.pick(db, cfg, 15, group_by_day=True)
     resultado["fotos_escolhidas"] = len(rows)
     if len(rows) < 3:
         resultado["motivo"] = "fotos insuficientes na galeria para montar um reel"
