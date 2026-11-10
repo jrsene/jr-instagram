@@ -271,6 +271,9 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
             cmd += ["-i", str(music)]
         if voice:
             cmd += ["-i", str(voice)]
+        if not music and not voice:  # sem música na pasta: fundo sintético, para o reel não sair mudo
+            cmd += ["-f", "lavfi", "-i", f"aevalsrc=0.16*sin(2*PI*110*t)+0.10*sin(2*PI*164.81*t)"
+                                          f"+0.07*sin(2*PI*220*t)+0.05*sin(2*PI*277.18*t):s=44100:d={total:.2f}"]
         fade = f"afade=t=out:st={total - 1:.2f}:d=1"
         audio = None
         if music and voice:
@@ -280,6 +283,9 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
             audio = "[a]"
         elif voice:
             filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade}[a]")
+            audio = "[a]"
+        elif not music:
+            filt.append(f"[{n}:a]lowpass=f=1400,tremolo=f=0.2:d=0.2,volume=0.9,afade=t=in:d=1,{fade}[a]")
             audio = "[a]"
         if voice and falado and cfg.get("edicao", {}).get("legenda_fala", True):
             from . import edicao
