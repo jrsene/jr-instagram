@@ -1,0 +1,26 @@
+# Teste manual: monta um reel só com fotos da galeria do site e guarda o resultado como artefato.
+# Não publica nada no Instagram e não usa segredos (a galeria é lida em modo público).
+name: render-galeria
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  galeria:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: ffmpeg e fontes
+        run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-inter
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+      - name: dependências de produção
+        run: pip install -r requirements.txt
+      - name: monta o reel com fotos da galeria
+        run: python tests/render_reel/galeria.py "$RUNNER_TEMP/galeria"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reel-galeria
+          path: ${{ runner.temp }}/galeria
