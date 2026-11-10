@@ -64,7 +64,7 @@ def plan_day(db, cfg, day: date, log=print):
     if kind:
         try:
             when = f"{day}T{hr.get('feed', '18:30')}"
-            rows, files, copy = [], [], None
+            rows, files, copy, kind_post = [], [], None, None
             if kind == "foto":
                 rows = library.pick(db, cfg, 1)
                 if rows:
@@ -90,7 +90,13 @@ def plan_day(db, cfg, day: date, log=print):
                     copy = captions.write(rows, cfg, "reel", log=log)  # legenda e título do reel saem antes do vídeo
                     reel = compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
                                               texto=copy.get("texto_story"), creditos=site.creditos(vids))
-                    files = [reel] if reel else []  # vídeo curto não vira reel
+                    if reel:
+                        files = [reel]
+                    else:  # vídeo curto não vira reel: sai como post de foto
+                        files = [out / "feed.jpg"]
+                        compose.single(vids[0], cfg).save(files[0], quality=93)
+                        kind_post = "feed"
+                        log("  vídeo curto: sai como post de foto, não como reel")
                 else:
                     rows = library.pick(db, cfg, 6, group_by_day=True)
                     if len(rows) >= 3:
@@ -104,7 +110,7 @@ def plan_day(db, cfg, day: date, log=print):
                             log(f"  narração: “{copy['narracao']}”")
             if files:
                 copy = copy or captions.write(rows, cfg, kind, log=log)
-                _save_post(db, cfg, when, "reel" if kind == "reel" else "feed", rows, files, copy)
+                _save_post(db, cfg, when, kind_post if kind == "reel" and kind_post else ("reel" if kind == "reel" else "feed"), rows, files, copy)
                 used |= {r["id"] for r in rows}
                 log(f"  feed/{kind}: {len(rows)} mídia(s) → {copy['legenda'][:60]}")
             else:
