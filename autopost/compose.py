@@ -141,6 +141,15 @@ def _font_peso(cfg, size, peso="Bold"):
     return ImageFont.load_default(size)
 
 
+def _logo(altura: int):
+    """Marca JR (assets/logo-jr.png, a mesma do site) na altura pedida; None se não existir."""
+    f = library.ROOT / "assets" / "logo-jr.png"
+    if not f.exists():
+        return None
+    im = Image.open(f).convert("RGBA")
+    return im.resize((round(im.width * altura / im.height), altura), Image.LANCZOS)
+
+
 def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict | None = None,
           selo: str | None = None) -> Image.Image:
     """Story 9:16 no visual do JR OS: foto inteira num quadro escuro (sem cortar projeto em paisagem),
@@ -186,9 +195,15 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
     # selo JR logo abaixo da foto (no topo ficava embaixo da foto e do nome do perfil)
     rotulo = (selo or ("OBRAS CONCLUÍDAS" if do_site else "PRESTADORA DE SERVIÇOS")).upper()
     fr = _font_peso(cfg, 18, "Bold")
-    d.rectangle((x - 8, y, x + 84 + d.textlength(rotulo, font=fr) + 26, y + 72), fill=(*JR_FUNDO, 190))
-    d.text((x + 16, y + 12), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
-    d.text((x + 84, y + 27), rotulo, font=fr, fill=JR_DOURADO)
+    logo = _logo(46)
+    lx = x + 16 + (logo.width if logo else d.textlength("JR", font=_font_peso(cfg, 40, "ExtraBold"))) + 20
+    d.rectangle((x - 8, y, lx + d.textlength(rotulo, font=fr) + 26, y + 72), fill=(*JR_FUNDO, 190))
+    if logo:  # logo de verdade da JR (o mesmo do site)
+        canvas.alpha_composite(logo, (x + 16, y + 13))
+        d = ImageDraw.Draw(canvas)
+    else:
+        d.text((x + 16, y + 12), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
+    d.text((lx, y + 27), rotulo, font=fr, fill=JR_DOURADO)
     y += 100
     if text:
         # a fonte não tem emoji (sairia um quadrado "NO GLYPH"): tira emoji e símbolos soltos
@@ -220,9 +235,14 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
     if credito and not (arq or fot):  # compatibilidade: crédito já pronto em texto
         d.text((x, y), credito, font=f, fill=JR_CREME)
         y += 44
-    rodape = "Veja o álbum completo em jrobras.com" if do_site else cfg.get("perfil", {}).get("handle", "")
+    fl = _font_peso(cfg, 27, "SemiBold")
+    rodape = cfg.get("perfil", {}).get("handle", "")
+    if do_site:  # endereço do álbum certo (jrobras.com/obra/<slug> abre direto as fotos dessa obra)
+        link = c.get("link") or ""
+        opcoes = [f"Álbum completo: {link}", link] if link else []
+        rodape = next((t for t in opcoes if d.textlength(t, font=fl) <= larg), "Veja o álbum completo em jrobras.com/galeria")
     if rodape:  # logo abaixo dos créditos, acima da barra de resposta (base de 340 px)
-        d.text((x, min(y + 14, H - 380)), rodape, font=_font_peso(cfg, 27, "SemiBold"), fill=(245, 243, 247))
+        d.text((x, min(y + 14, H - 380)), rodape, font=fl, fill=(245, 243, 247))
     return canvas.convert("RGB")
 
 
