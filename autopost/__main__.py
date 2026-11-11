@@ -18,7 +18,7 @@ from pathlib import Path
 
 import yaml
 
-from . import captions, compose, curate, drive, library, onedrive, site, voz
+from . import captions, compose, curate, drive, library, modelos_story, onedrive, site, voz
 
 ROOT = Path(__file__).resolve().parent.parent
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
@@ -44,6 +44,48 @@ def _save_post(db, cfg, when, ptype, rows, files, copy):
                 json.dumps([r["id"] for r in rows]), json.dumps([str(f) for f in files]),
                 captions.full_caption(copy) if ptype != "story" else "", json.dumps(copy, ensure_ascii=False)))
     library.mark_used(db, [r["id"] for r in rows])
+
+
+def _render_story(modelo: str, rows, cfg, base: Path, texto: str) -> Path:
+    """Monta o story no modelo pedido; devolve o arquivo (jpg, ou mp4 no modelo player)."""
+    cred = site.creditos(rows)
+    if modelo == "player":
+        return modelos_story.player(rows, cfg, base.with_suffix(".mp4"), text=texto, creditos=cred)
+    fn = {"galeria": modelos_story.galeria, "editorial": modelos_story.editorial}.get(modelo)
+    im = fn(rows, cfg, text=texto, creditos=cred) if fn else compose.story(rows, cfg, text=texto, creditos=cred)
+    f = base.with_suffix(".jpg")
+    im.save(f, quality=92)
+    return f
+
+
+def refazer_stories(db, cfg, log=print):
+    """Stories já montados que ainda não saíram ganham os modelos novos do Canva (pedido de 11/11/2026)."""
+    agora = datetime.now().isoformat(timespec="minutes")
+    for p in db.execute("select * from posts where type='story' and status in ('pronto','aprovado','pendente','rascunho')"
+                        " and scheduled_for>=? order by scheduled_for", (agora,)).fetchall():
+        meta = json.loads(p["meta"] or "{}")
+        texto = meta.get("texto_story") or ""
+        if meta.get("modelo") or texto.startswith("Há "):
+            continue
+        ids = json.loads(p["media_ids"] or "[]")
+        rows = [r for r in db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids)] if ids else []
+        if not rows:
+            continue
+        # título antigo da IA ("…: reforma completa entregue") dá lugar ao nome do projeto
+        texto = ((site.creditos(rows).get("albuns") or [{}])[0].get("album") or texto)
+        modelo = modelos_story.escolher(p["id"])
+        if modelo == "player" and len(rows) < 2:
+            modelo = ["galeria", "editorial"][p["id"] % 2]
+        try:
+            antigo = Path(json.loads(p["files"])[0])
+            f = _render_story(modelo, rows, cfg, antigo.with_name(antigo.stem + "_v2"), texto)
+        except Exception as e:
+            log(f"  story #{p['id']}: não deu para refazer ({type(e).__name__}: {str(e)[:120]})")
+            continue
+        db.execute("update posts set files=?, meta=? where id=?",
+                   (json.dumps([str(f)]), json.dumps({**meta, "modelo": modelo}, ensure_ascii=False), p["id"]))
+        log(f"  story #{p['id']} refeito no modelo {modelo}")
+    db.commit()
 
 
 def plan_day(db, cfg, day: date, log=print):
@@ -151,17 +193,24 @@ def plan_day(db, cfg, day: date, log=print):
             log(f"  lembrança: foto de {rows[0]['taken_at'][:10]}")
 
     for i in range(ag.get("stories", 0) or 0):
-        n = 1 if (seed + i) % 3 else 2
-        rows = library.pick(db, cfg, n, group_by_day=n > 1, exclude=used, nota="nota_stories")
+        modelo = modelos_story.escolher(seed + i)  # os modelos do Canva se revezam
+        rows = []
+        if modelo == "player":  # vídeo com as fotos da mesma obra passando em slide
+            for n in (5, 4, 3, 2):
+                rows = library.pick(db, cfg, n, group_by_day=True, exclude=used, nota="nota_stories")
+                if len(rows) >= n:
+                    break
+            if len(rows) < 2:
+                modelo, rows = "galeria", []
+        rows = rows or library.pick(db, cfg, 1, exclude=used, nota="nota_stories")
         if not rows:
             log("  story: sem mídia nova, pulando")
             break
         copy = captions.write(rows, cfg, "story", log=log)
-        f = out / f"story_{i + 1}.jpg"
-        compose.story(rows, cfg, text=copy["texto_story"], creditos=site.creditos(rows)).save(f, quality=92)
-        _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], copy)
+        f = _render_story(modelo, rows, cfg, out / f"story_{i + 1}", copy["texto_story"])
+        _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], {**copy, "modelo": modelo})
         used |= {r["id"] for r in rows}
-        log(f"  story {i + 1}: “{copy['texto_story']}”")
+        log(f"  story {i + 1} ({modelo}): “{copy['texto_story']}”")
     db.commit()
 
 
@@ -330,6 +379,8 @@ def main(argv=None):
         q = "update posts set status='aprovado' where status='pendente'" + ("" if a.arg == "all" else " and id=?")
         db.execute(q, () if a.arg == "all" else (int(a.arg),))
         db.commit()
+    if a.cmd in ("run", "plan"):
+        refazer_stories(db, cfg)
     if a.cmd in ("run", "publish"):
         publish_due(db, cfg)
     if a.cmd in ("run", "plan", "preview"):
