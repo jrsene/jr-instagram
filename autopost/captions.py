@@ -18,14 +18,13 @@ class Copy(BaseModel):
     narracao: str = ""    # só para reels: 1 a 2 frases faladas em primeira pessoa (narração com a voz dele)
 
 
-FALLBACK = [
-    "Guardando esse momento por aqui.",
-    "Pequenos recortes de dias bons.",
-    "Do jeito que foi, sem filtro de humor.",
-    "Mais um capítulo pra coleção.",
-    "Quando a vida acontece, a gente registra.",
+# Quando a IA não responde, a legenda sai sóbria e factual, com o nome do projeto (nunca frase genérica).
+FALLBACK_TMPL = [
+    "{album}.",
+    "{album}, {cidade}.",
+    "Acabamento de {album}.",
 ]
-FALLBACK_STORY = ["Bom dia por aqui", "Olha isso", "Recortes da semana", "Momento do dia", "Você já viu?"]
+FALLBACK_STORY_TMPL = ["{album}", "Projeto {album}"]
 
 
 def _b64(path, size=768) -> str:
@@ -34,6 +33,16 @@ def _b64(path, size=768) -> str:
     buf = io.BytesIO()
     im.save(buf, "JPEG", quality=82)
     return base64.standard_b64encode(buf.getvalue()).decode()
+
+
+def _nome_projeto(rows) -> str:
+    """Nome do projeto para a legenda de reserva (galeria do site); vazio se não houver."""
+    from .site import creditos
+    try:
+        albuns = creditos(rows).get("albuns") or []
+    except Exception:
+        albuns = []
+    return (albuns[0].get("album") or "").strip() if albuns else ""
 
 
 def _contexto(rows) -> str:
@@ -65,9 +74,11 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 f"Tom de voz: {perfil.get('voz', '')}\n"
                 f"Formato do post: {formato}. As imagens acima vão juntas nesse post.\n"
                 + _contexto(rows) +
-                "Escreva uma legenda curta e natural (1 a 3 frases, pode ter uma pergunta para engajar), "
-                f"até {maxh} hashtags específicas ao que aparece (nada genérico tipo #love), "
-                "um texto bem curto para o story e um alt text descritivo. "
+                "Escreva a legenda como um profissional de arquitetura escreveria: blocos curtos, frase-tese simples, "
+                "depois o que foi feito, com material, luz ou uso do espaço. Nada de adjetivo vazio, emoji, pergunta "
+                "para engajar, frase de efeito, 'não é X, é Y' ou travessão. "
+                "Até 3 hashtags, só de cidade ou tipo de obra. "
+                "Um texto curto para o story (o nome do projeto ou a cidade, sem slogan) e um alt text descritivo. "
                 + ("Como é um reel, escreva também a narração: 1 ou 2 frases curtas, faladas em primeira pessoa, "
                    "naturais como alguém contando o momento para um amigo (até ~12 segundos de fala). "
                    if "reel" in formato else "") +
@@ -87,7 +98,11 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                         "alt_text": c.alt_text, "narracao": c.narracao, "fonte": "ia"}
         except Exception as e:
             log(f"  ! IA indisponível ({type(e).__name__}: {e}); usando legenda padrão")
-    return {"legenda": random.choice(FALLBACK), "hashtags": fixed, "texto_story": random.choice(FALLBACK_STORY),
+    album = _nome_projeto(rows) or "Obra concluída"
+    cidade = (perfil.get("cidade") or "Apucarana")
+    return {"legenda": random.choice(FALLBACK_TMPL).format(album=album, cidade=cidade),
+            "hashtags": fixed,
+            "texto_story": random.choice(FALLBACK_STORY_TMPL).format(album=album),
             "alt_text": "", "narracao": "", "fonte": "modelo"}
 
 
