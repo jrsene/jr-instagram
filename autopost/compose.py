@@ -141,6 +141,11 @@ def _font_peso(cfg, size, peso="Bold"):
     return ImageFont.load_default(size)
 
 
+def _limpa(text: str) -> str:
+    """Tira emoji e símbolos soltos (a fonte não tem emoji: sairia um quadrado)."""
+    return re.sub(r"\s+", " ", _SEM_EMOJI.sub("", text or "")).strip(" -–—·|")
+
+
 def _logo(altura: int):
     """Marca JR (assets/logo-jr.png, a mesma do site) na altura pedida; None se não existir."""
     f = library.ROOT / "assets" / "logo-jr.png"
