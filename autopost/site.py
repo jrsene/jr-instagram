@@ -2,6 +2,8 @@
 do arquiteto e do fotógrafo de cada álbum. Lê a mesma base pública que a página /galeria usa."""
 import io
 import json
+import re
+import unicodedata
 
 import requests
 from PIL import Image, ImageOps
@@ -23,6 +25,47 @@ def _docs(projeto: str) -> list[dict]:
     r = requests.post(FIRESTORE.format(projeto=projeto), json=body, timeout=60)
     r.raise_for_status()
     return [d["document"] for d in r.json() if "document" in d]
+
+
+def slug(s: str) -> str:
+    """Mesmo slug da galeria (jrSlug em galeria.html): jrobras.com/obra/<slug> abre o álbum."""
+    s = unicodedata.normalize("NFD", str(s or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "obra"
+
+
+def _num(v: str) -> float:
+    try:
+        return float(v)
+    except ValueError:
+        return 0.0
+
+
+def _slugs_albuns(docs: list[dict]) -> dict:
+    """id da mídia -> slug do álbum, com o mesmo agrupamento e título de jrCarregarGaleria()
+    (galeria.html): obraId, senão pastaOrigem, senão avulsa; título = obraNome da mídia mais
+    recente, senão o título da capa, senão a pasta."""
+    itens = []
+    for d in docs:
+        f = d["fields"]
+        insta = _val(f, "tipo") == "video/instagram" or "instagram.com" in (_val(f, "instagramUrl") or _val(f, "url")).lower()
+        if _val(f, "url") and _val(f, "excluida") != "True" and not insta:
+            itens.append((d["name"].rsplit("/", 1)[-1], f))
+    itens.sort(key=lambda x: _val(x[1], "criadoEmISO"), reverse=True)
+    grupos = {}
+    for sid, f in itens:
+        pasta = _val(f, "pastaOrigem")
+        chave = f"obra:{_val(f, 'obraId')}" if _val(f, "obraId") else (f"pasta:{pasta.lower()}" if pasta else f"solo:{sid}")
+        g = grupos.setdefault(chave, {"obraNome": _val(f, "obraNome"), "pasta": pasta, "itens": []})
+        g["itens"].append((sid, f))
+    out = {}
+    for g in grupos.values():
+        ordenados = sorted(g["itens"], key=lambda x: (_num(_val(x[1], "ordemSite")), _val(x[1], "criadoEmISO")))
+        capa = next((f for _, f in ordenados if not _val(f, "tipo").startswith("video/")), ordenados[0][1])
+        titulo = g["obraNome"] or _val(capa, "titulo") or g["pasta"] or "Serviço concluído JR"
+        for sid, _ in g["itens"]:
+            out[sid] = slug(titulo)
+    return out
 
 
 def _arroba(h: str) -> str:
@@ -55,6 +98,7 @@ def sync(db, cfg: dict, log=print) -> int:
         return 0
     docs = _docs(sc.get("firebase_projeto", "jr-zacaria"))
     fotos = [d for d in docs if _val(d["fields"], "tipo").startswith("image/")]
+    slugs = _slugs_albuns(docs)
     # quem não tem @ preenchido num álbum herda o @ que o mesmo nome tem em outro álbum
     arroba = {}
     for d in fotos:
@@ -72,7 +116,7 @@ def sync(db, cfg: dict, log=print) -> int:
         album = _val(f, "pastaOrigem") or _val(f, "albumOrigem") or _val(f, "obraNome") or _val(f, "titulo")
         arq = _val(f, "nomeArquiteto") or _val(f, "creditoProjeto")
         fot = _val(f, "nomeFotografo") or (_val(f, "creditoFotografo") if not _val(f, "creditoFotografo").startswith("@") else "")
-        cred = {"album": album, "descricao": _val(f, "descricaoAlbum")[:500], "url": _val(f, "url"),
+        cred = {"album": album, "descricao": _val(f, "descricaoAlbum")[:500], "url": _val(f, "url"), "slug": slugs.get(sid, ""),
                 "arquiteto": arq, "arquiteto_ig": _arroba(_val(f, "instagramArquiteto")) or arroba.get(arq.lower(), ""),
                 "fotografo": fot,
                 "fotografo_ig": _arroba(_val(f, "instagramFotografo") or (_val(f, "creditoFotografo") if _val(f, "creditoFotografo").startswith("@") else ""))
@@ -129,10 +173,11 @@ def creditos(rows) -> dict:
         if c.get("arquiteto") and c["arquiteto"] not in nomes:
             nomes.append(c["arquiteto"])
         if c.get("album") and c["album"] not in [a["album"] for a in albuns]:
-            albuns.append({"album": c["album"], "descricao": c.get("descricao", "")})
+            albuns.append({"album": c["album"], "descricao": c.get("descricao", ""), "slug": c.get("slug", "")})
     marcar = [x.lstrip("@") for x in arq + fot if x.startswith("@")]
+    link = next((f"jrobras.com/obra/{a['slug']}" for a in albuns if a.get("slug")), "")
     return {"arquiteto": arq, "fotografo": fot, "marcar": marcar, "albuns": albuns, "nomes_arquitetos": nomes,
-            "arquiteto_txt": arq_txt, "fotografo_txt": fot_txt}
+            "arquiteto_txt": arq_txt, "fotografo_txt": fot_txt, "link": link}
 
 
 def linha_creditos(c: dict) -> str:
@@ -147,5 +192,5 @@ def linha_creditos(c: dict) -> str:
     if fot:
         partes.append(f"Fotografia: {' e '.join(fot)}")
     if c.get("albuns"):
-        partes.append("Álbum completo: jrobras.com/galeria")
+        partes.append(f"Álbum completo: {c.get('link') or 'jrobras.com/galeria'}")
     return "\n".join(partes)

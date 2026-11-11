@@ -97,17 +97,18 @@ class Publisher:
         return cid
 
     @staticmethod
-    def _tags(marcar) -> dict:
-        """Marca arquiteto e fotógrafo na foto (pontos discretos perto do rodapé)."""
+    def _tags(marcar, y: float = 0.92) -> dict:
+        """Marca arquiteto e fotógrafo na foto (pontos discretos perto do rodapé). No story vira menção:
+        quem toca vai para o perfil deles."""
         if not marcar:
             return {}
         import json
         return {"user_tags": json.dumps([{"username": u, "x": round(0.15 + 0.7 * i / max(1, len(marcar) - 1), 2)
-                                          if len(marcar) > 1 else 0.5, "y": 0.92} for i, u in enumerate(marcar[:5])])}
+                                          if len(marcar) > 1 else 0.5, "y": y} for i, u in enumerate(marcar[:5])])}
 
-    def _container_tags(self, file: Path, marcar, **extra):
+    def _container_tags(self, file: Path, marcar, y: float = 0.92, **extra):
         try:
-            return self._container(file, **extra, **self._tags(marcar))
+            return self._container(file, **extra, **self._tags(marcar, y))
         except RuntimeError as e:  # @ errado ou conta que não aceita marcação: publica sem marcar (o @ segue na legenda)
             if not marcar:
                 raise
@@ -118,7 +119,8 @@ class Publisher:
         marcar = list(marcar or [])
         if ptype == "story":
             mt = "STORIES"
-            cid = self._container(files[0], media_type=mt)
+            # menção na altura dos créditos do story (arquitetura e fotografia, perto de 76% da altura)
+            cid = self._container_tags(files[0], marcar, y=0.76, media_type=mt)
         elif ptype == "reel":
             cid = self._container(files[0], media_type="REELS", caption=caption, share_to_feed="true")
         elif len(files) > 1:
