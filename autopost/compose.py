@@ -272,8 +272,7 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         if voice:
             cmd += ["-i", str(voice)]
         if not music and not voice:  # sem música na pasta: fundo sintético, para o reel não sair mudo
-            cmd += ["-f", "lavfi", "-i", f"aevalsrc=0.16*sin(2*PI*110*t)+0.10*sin(2*PI*164.81*t)"
-                                          f"+0.07*sin(2*PI*220*t)+0.05*sin(2*PI*277.18*t):s=44100:d={total:.2f}"]
+            cmd += ["-f", "lavfi", "-i", f"aevalsrc=0.13*sin(2*PI*220*t)+0.09*sin(2*PI*330*t):s=44100:d={total:.2f}"]
         fade = f"afade=t=out:st={total - 1:.2f}:d=1"
         audio = None
         if music and voice:
@@ -285,7 +284,7 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
             filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade}[a]")
             audio = "[a]"
         elif not music:
-            filt.append(f"[{n}:a]lowpass=f=1400,tremolo=f=0.2:d=0.2,volume=0.9,afade=t=in:d=1,{fade}[a]")
+            filt.append(f"[{n}:a]lowpass=f=1200,volume=0.8,afade=t=in:d=1,{fade}[a]")
             audio = "[a]"
         if voice and falado and cfg.get("edicao", {}).get("legenda_fala", True):
             from . import edicao
@@ -357,15 +356,15 @@ def _overlay_video(texto: str | None, creditos: dict | None, cfg: dict, falado: 
 
 def _trilha(cfg, seed: int, T: float, volume: float):
     """Trilha para o reel: uma música de assets/music (em loop) ou, se a pasta estiver vazia,
-    um fundo sintético suave (acorde grave com leve tremolo). Devolve (entradas do ffmpeg, filtro até [2:a])."""
+    um fundo sintético suave (dois tons graves e suaves, sem pulsos). Devolve (entradas do ffmpeg, filtro até [2:a])."""
     pasta = library.ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")
     mp3 = sorted(pasta.glob("*.mp3")) if pasta.exists() else []
     if mp3:
         return (["-stream_loop", "-1", "-i", str(mp3[seed % len(mp3)])],
                 f"[2:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
-    return (["-f", "lavfi", "-i", f"aevalsrc=0.16*sin(2*PI*110*t)+0.10*sin(2*PI*164.81*t)"
-                                  f"+0.07*sin(2*PI*220*t)+0.05*sin(2*PI*277.18*t):s=44100:d={T:.2f}"],
-            f"[2:a]lowpass=f=1400,tremolo=f=0.2:d=0.2,volume={volume}")
+    return (["-f", "lavfi", "-i", f"aevalsrc=0.13*sin(2*PI*220*t)+0.09*sin(2*PI*330*t):s=44100:d={T:.2f}"],
+                      
+            f"[2:a]lowpass=f=1200,volume={volume}")
 
 
 def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None = None,
