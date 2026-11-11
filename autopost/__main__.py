@@ -64,7 +64,7 @@ def plan_day(db, cfg, day: date, log=print):
     if kind:
         try:
             when = f"{day}T{hr.get('feed', '18:30')}"
-            rows, files, copy, kind_post = [], [], None, None
+            rows, files, copy, tipo = [], [], None, ("reel" if kind == "reel" else "feed")
             if kind == "foto":
                 rows = library.pick(db, cfg, 1)
                 if rows:
@@ -95,11 +95,19 @@ def plan_day(db, cfg, day: date, log=print):
                     else:  # vídeo curto não vira reel: sai como post de foto
                         files = [out / "feed.jpg"]
                         compose.single(vids[0], cfg).save(files[0], quality=93)
-                        kind_post = "feed"
+                        tipo = "feed"
                         log("  vídeo curto: sai como post de foto, não como reel")
                 else:
-                    rows = library.pick(db, cfg, 6, group_by_day=True)
-                    if len(rows) >= 3:
+                    # 15 fotos a 2,4 s cada, com transições de 0,4 s, dão cerca de 30 s: abaixo disso não é reel
+                    rows = library.pick(db, cfg, 15, group_by_day=True)
+                    if len(rows) < 15:
+                        rows = library.pick(db, cfg, 1)
+                        if rows:
+                            files = [out / "feed.jpg"]
+                            compose.single(rows[0], cfg).save(files[0], quality=93)
+                            tipo = "feed"
+                            log("  fotos insuficientes para 30 s: sai como post de foto, não como reel")
+                    if len(rows) >= 15:
                         music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
                         mus = music[seed % len(music)] if music else None
                         copy = captions.write(rows, cfg, kind, log=log)
@@ -110,7 +118,7 @@ def plan_day(db, cfg, day: date, log=print):
                             log(f"  narração: “{copy['narracao']}”")
             if files:
                 copy = copy or captions.write(rows, cfg, kind, log=log)
-                _save_post(db, cfg, when, kind_post if kind == "reel" and kind_post else ("reel" if kind == "reel" else "feed"), rows, files, copy)
+                _save_post(db, cfg, when, tipo, rows, files, copy)
                 used |= {r["id"] for r in rows}
                 log(f"  feed/{kind}: {len(rows)} mídia(s) → {copy['legenda'][:60]}")
             else:
