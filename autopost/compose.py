@@ -154,7 +154,9 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
     canvas = bg.convert("RGBA")
     canvas.alpha_composite(Image.new("RGBA", STORY, (*JR_FUNDO, 148)))
 
-    quadro = (54, 190, W - 54, 1310)
+    # Área segura do Instagram: o topo (~250 px) tem a foto e o nome do perfil e a base (~340 px)
+    # tem a barra de resposta. Nada da arte fica embaixo disso.
+    quadro = (54, 250, W - 54, 1130)
     qw, qh = quadro[2] - quadro[0], quadro[3] - quadro[1]
     d = ImageDraw.Draw(canvas)
     if len(rows) == 1:
@@ -180,26 +182,24 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
     canvas.alpha_composite(sombra.resize((W, H - int(H * 0.47))), (0, int(H * 0.47)))
 
     d = ImageDraw.Draw(canvas)
-    rotulo = "OBRAS CONCLUÍDAS" if do_site else "PRESTADORA DE SERVIÇOS"
+    x, y, larg = 62, 1170, W - 124
+    # selo JR logo abaixo da foto (no topo ficava embaixo da foto e do nome do perfil)
+    rotulo = (selo or ("OBRAS CONCLUÍDAS" if do_site else "PRESTADORA DE SERVIÇOS")).upper()
     fr = _font_peso(cfg, 18, "Bold")
-    d.rectangle((54, 58, 146 + d.textlength(rotulo, font=fr) + 26, 130), fill=(*JR_FUNDO, 190))
-    d.text((78, 70), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
-    d.text((146, 85), rotulo, font=fr, fill=(245, 243, 247))
-
-    x, y, larg = 62, 1372, W - 124
-    selo = selo or ("PROJETO CONCLUÍDO" if do_site else "NOSSO TRABALHO")
-    d.text((x, y), selo.upper(), font=_font_peso(cfg, 27, "Bold"), fill=JR_DOURADO)
-    y += 52
+    d.rectangle((x - 8, y, x + 84 + d.textlength(rotulo, font=fr) + 26, y + 72), fill=(*JR_FUNDO, 190))
+    d.text((x + 16, y + 12), "JR", font=_font_peso(cfg, 40, "ExtraBold"), fill=(245, 243, 247))
+    d.text((x + 84, y + 27), rotulo, font=fr, fill=JR_DOURADO)
+    y += 100
     if text:
         # a fonte não tem emoji (sairia um quadrado "NO GLYPH"): tira emoji e símbolos soltos
         text = re.sub(r"\s+", " ", _SEM_EMOJI.sub("", text)).strip(" -–—·|")
         f = _font_peso(cfg, 60, "ExtraBold")
         linhas = _wrap(d, text, f, larg)
-        if len(linhas) > 2:  # texto mais longo: fonte menor e até 3 linhas antes de cortar
+        if len(linhas) > 2:  # texto mais longo: fonte menor e até 2 linhas antes de cortar
             f = _font_peso(cfg, 50, "ExtraBold")
             linhas = _wrap(d, text, f, larg)
-        if len(linhas) > 3:
-            linhas = linhas[:3]
+        if len(linhas) > 2:
+            linhas = linhas[:2]
             while linhas[-1] and d.textlength(linhas[-1] + "…", font=f) > larg:
                 linhas[-1] = linhas[-1][:-1]
             linhas[-1] = linhas[-1].rstrip() + "…"
@@ -219,9 +219,10 @@ def story(rows, cfg, text: str | None = None, credito: str = "", creditos: dict 
             y += 44
     if credito and not (arq or fot):  # compatibilidade: crédito já pronto em texto
         d.text((x, y), credito, font=f, fill=JR_CREME)
+        y += 44
     rodape = "Veja o álbum completo em jrobras.com" if do_site else cfg.get("perfil", {}).get("handle", "")
-    if rodape:
-        d.text((x, H - 205), rodape, font=_font_peso(cfg, 27, "SemiBold"), fill=(245, 243, 247))
+    if rodape:  # logo abaixo dos créditos, acima da barra de resposta (base de 340 px)
+        d.text((x, min(y + 14, H - 380)), rodape, font=_font_peso(cfg, 27, "SemiBold"), fill=(245, 243, 247))
     return canvas.convert("RGB")
 
 
