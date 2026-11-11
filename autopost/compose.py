@@ -391,13 +391,23 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
                 trechos = edicao.trechos_com_fala(words, min(max_s, edicao.duracao(src)), pausa=ec.get("pausa_max", 0.6))
                 novo = edicao.remapear(words, trechos)
                 edicao.cortar(src, base, trechos, "null")
-                log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
+                if edicao.duracao(base) < min_s:
+                    # corte curto demais: usa o clipe inteiro, em vez de congelar o último quadro até o mínimo
+                    trechos = [(0.0, min(max_s, edicao.duracao(src)))]
+                    novo = list(words)
+                    edicao.cortar(src, base, trechos, "null")
+                    log("  edição: fala curta demais para cortar; usando o clipe inteiro")
+                else:
+                    log(f"  edição: {len(trechos)} trecho(s) com fala, {len(words)} palavras legendadas")
         if not falado:  # sem fala: o som do ambiente sai
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-t", str(max_s), "-an", "-c:v", "libx264",
                             "-preset", "veryfast", "-crf", "20", "-movflags", "+faststart", str(base)], check=True)
         L = edicao.duracao(base)
         F = 1.0 if falado or L >= min_s else min(1.6, min_s / L)
         T = max(min_s, L * F)
+        if T < float(vc.get("duracao_reel", 30)):  # reel pequeno não sai: sem conteúdo para 30 s
+            log(f"  só {T:.1f} s de conteúdo; reel precisa de {vc.get('duracao_reel', 30)} s: não sai")
+            return None
         pad = round(T - L * F, 2)
         log(f"  reel: {T:.1f}s ({'com fala' if falado else 'sem fala, com trilha'})")
 

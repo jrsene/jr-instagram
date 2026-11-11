@@ -103,7 +103,8 @@ regras:
 # Seus vídeos viram reel tratado: fala (legenda no tempo de cada palavra) ou, sem fala, trilha no lugar do som cru.
 video:
   duracao_min: 8                   # segundos; vídeo mais curto ganha câmera lenta leve e quadro parado no fim
-  duracao_max: 30
+  duracao_max: 45
+  duracao_reel: 30               # reel só sai com esse conteúdo; vídeo mais curto não vira reel
 
 visual:
   fundo: "#F4EFE8"                 # cor de fundo das montagens

@@ -88,8 +88,15 @@ def plan_day(db, cfg, day: date, log=print):
                 if vids:
                     rows = vids
                     copy = captions.write(rows, cfg, "reel", log=log)  # legenda e título do reel saem antes do vídeo
-                    files = [compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
-                                                texto=copy.get("texto_story"), creditos=site.creditos(vids))]
+                    reel = compose.video_reel(vids[0], out / "reel.mp4", cfg=cfg, log=log,
+                                              texto=copy.get("texto_story"), creditos=site.creditos(vids))
+                    if reel:
+                        files = [reel]
+                    else:  # vídeo curto não vira reel: sai como post de foto
+                        files = [out / "feed.jpg"]
+                        compose.single(vids[0], cfg).save(files[0], quality=93)
+                        tipo = "feed"
+                        log("  vídeo curto: sai como post de foto, não como reel")
                 else:
                     # 15 fotos a 2,4 s cada, com transições de 0,4 s, dão cerca de 30 s: abaixo disso não é reel
                     rows = library.pick(db, cfg, 15, group_by_day=True)
