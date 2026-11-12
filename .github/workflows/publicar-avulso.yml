@@ -14,6 +14,10 @@ on:
         description: "true publica de verdade; false só gera a prévia"
         type: boolean
         default: false
+      reel:
+        description: "true publica o vídeo como reel (REELS); false publica como post de vídeo"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency: publicar-avulso
@@ -35,4 +39,5 @@ jobs:
         run: |
           FLAG=""
           if [ "${{ inputs.publicar }}" = "true" ]; then FLAG="--publicar"; fi
+          if [ "${{ inputs.reel }}" = "true" ]; then FLAG="$FLAG --reel"; fi
           python -m autopost.avulso --midia "${{ inputs.midia }}" --legenda "${{ inputs.legenda }}" $FLAG

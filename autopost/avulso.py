@@ -21,6 +21,7 @@ def main(argv=None):
     ap.add_argument("--midia", required=True, help="caminho do .mp4 (ou .jpg) dentro do repositório")
     ap.add_argument("--legenda", required=True, help="arquivo .txt com a legenda final (hashtags incluídas)")
     ap.add_argument("--publicar", action="store_true", help="publica de verdade no Instagram")
+    ap.add_argument("--reel", action="store_true", help="publica o vídeo como reel (REELS), em vez de post de vídeo")
     a = ap.parse_args(argv)
 
     midia = (ROOT / a.midia).resolve()
@@ -43,7 +44,10 @@ def main(argv=None):
         print("Prévia pronta. Nada foi publicado (faltou --publicar).")
         return
     pub = Publisher({}, ROOT)
-    igid = pub.publish("video" if tipo == "video" else "feed", [destino], legenda)
+    if a.reel and tipo != "video":
+        sys.exit("--reel só vale para vídeo .mp4")
+    ptipo = "reel" if a.reel else ("video" if tipo == "video" else "feed")
+    igid = pub.publish(ptipo, [destino], legenda)
     print(f"publicado: id {igid}")
 
 
