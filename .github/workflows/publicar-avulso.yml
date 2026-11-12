@@ -1,0 +1,38 @@
+# Publicação manual de um post avulso (vídeo ou foto com legenda própria).
+# Não mexe na seleção do piloto automático. Sem marcar "publicar", só gera a prévia.
+name: publicar-avulso
+on:
+  workflow_dispatch:
+    inputs:
+      midia:
+        description: "caminho do arquivo no repositório, ex: posts/comfy-antes-depois/video.mp4"
+        required: true
+      legenda:
+        description: "arquivo .txt com a legenda final"
+        required: true
+      publicar:
+        description: "true publica de verdade; false só gera a prévia"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency: publicar-avulso
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      IG_USER_ID: ${{ secrets.IG_USER_ID }}
+      IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+      STATE_KEY: ${{ secrets.STATE_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt
+      - name: prepara ou publica o avulso
+        run: |
+          FLAG=""
+          if [ "${{ inputs.publicar }}" = "true" ]; then FLAG="--publicar"; fi
+          python -m autopost.avulso --midia "${{ inputs.midia }}" --legenda "${{ inputs.legenda }}" $FLAG
