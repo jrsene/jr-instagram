@@ -18,6 +18,10 @@ on:
         description: "true publica o vídeo como reel (REELS); false publica como post de vídeo"
         type: boolean
         default: false
+      story:
+        description: "true publica a mídia como story (STORIES)"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency: publicar-avulso
@@ -40,4 +44,5 @@ jobs:
           FLAG=""
           if [ "${{ inputs.publicar }}" = "true" ]; then FLAG="--publicar"; fi
           if [ "${{ inputs.reel }}" = "true" ]; then FLAG="$FLAG --reel"; fi
+          if [ "${{ inputs.story }}" = "true" ]; then FLAG="$FLAG --story"; fi
           python -m autopost.avulso --midia "${{ inputs.midia }}" --legenda "${{ inputs.legenda }}" $FLAG

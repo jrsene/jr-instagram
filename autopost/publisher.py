@@ -121,6 +121,8 @@ class Publisher:
             mt = "STORIES"
             # menção na altura dos créditos do story (arquitetura e fotografia, perto de 76% da altura)
             cid = self._container_tags(files[0], marcar, y=0.76, media_type=mt)
+        elif ptype == "story":  # story avulso (usado pelo autopost.avulso --story)
+            cid = self._container(files[0], media_type="STORIES")
         elif ptype == "video":  # vídeo avulso no feed (usado pelo autopost.avulso)
             cid = self._container(files[0], media_type="VIDEO", caption=caption)
         elif ptype == "reel":
