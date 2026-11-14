@@ -3,7 +3,7 @@ import hashlib
 import json
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -210,7 +210,78 @@ def obras_recentes(db, n: int = 2) -> set:
     return {chave_obra(r) for r in rows if chave_obra(r)}
 
 
-def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False, exclude=(), nota: str = "nota_feed") -> list[sqlite3.Row]:
+def arquiteto_de(r) -> str:
+    """Primeiro arquiteto do álbum (minúsculo), vindo da ficha de crédito do site."""
+    try:
+        c = json.loads(r["credito"] or "{}")
+    except (TypeError, ValueError):
+        return ""
+    arq = c.get("arquiteto") or []
+    if isinstance(arq, str):
+        arq = [arq]
+    return (arq[0] if arq else "").strip().lower()
+
+
+def _midias_de(db, dia_iso: str) -> list:
+    """Mídias dos posts (que não foram descartados) agendados para o dia."""
+    out: list = []
+    for (m,) in db.execute("select media_ids from posts where status!='descartado' and substr(scheduled_for,1,10)=?", (dia_iso,)).fetchall():
+        ids = json.loads(m or "[]")
+        if ids:
+            out += db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids).fetchall()
+    return out
+
+
+def _arquitetos_do_dia(db, day: date):
+    """(arquiteto já escolhido para o dia, arquitetos do dia anterior a evitar)."""
+    do_dia = {arquiteto_de(r) for r in _midias_de(db, day.isoformat())} - {""}
+    prev = db.execute("select substr(scheduled_for,1,10) from posts where status!='descartado' and substr(scheduled_for,1,10)<?"
+                      " order by scheduled_for desc limit 1", (day.isoformat(),)).fetchone()
+    anterior = ({arquiteto_de(r) for r in _midias_de(db, prev[0])} - {""}) if prev else set()
+    return (next(iter(do_dia)) if len(do_dia) == 1 else None), anterior
+
+
+def _contagem_semana(db, day: date) -> dict:
+    """Quantas postagens de feed (não story) cada arquiteto teve na semana do dia."""
+    seg = day - timedelta(days=day.weekday())
+    cont: dict = {}
+    for (m,) in db.execute("select media_ids from posts where type!='story' and status!='descartado'"
+                           " and scheduled_for>=? and scheduled_for<?",
+                           (seg.isoformat(), (seg + timedelta(days=7)).isoformat())).fetchall():
+        ids = json.loads(m or "[]")
+        if not ids:
+            continue
+        rows = db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids).fetchall()
+        for a in {arquiteto_de(r) for r in rows} - {""}:
+            cont[a] = cont.get(a, 0) + 1
+    return cont
+
+
+def _filtra_arquitetos(db, cfg: dict, rows: list, n: int, day: date, story: bool) -> list:
+    """Regras de arquiteto: um arquiteto por dia (diferente do dia anterior), pausados e limite semanal."""
+    arq = cfg.get("arquitetos", {}) or {}
+    pausados = [x.lower() for x in (arq.get("pausados_stories") or [])] if story else []
+    limites = {k.lower(): int(v) for k, v in (arq.get("limite_semanal") or {}).items()}
+    if pausados:
+        rows = [r for r in rows if not any(p in arquiteto_de(r) for p in pausados)]
+    if limites and not story:
+        semana = _contagem_semana(db, day)
+        rows = [r for r in rows if not any(k in arquiteto_de(r) and semana.get(arquiteto_de(r), 0) >= v
+                                           for k, v in limites.items())]
+    do_dia, anterior = _arquitetos_do_dia(db, day)
+    if do_dia:
+        pref = [r for r in rows if arquiteto_de(r) == do_dia]
+        if len(pref) >= n:
+            return pref
+    else:
+        longe = [r for r in rows if arquiteto_de(r) not in anterior]
+        if len(longe) >= n:
+            return longe
+    return rows
+
+
+def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False, exclude=(), nota: str = "nota_feed",
+         story: bool = False, day: date | None = None) -> list[sqlite3.Row]:
     """Escolhe n mídias: as melhores ainda não usadas primeiro, respeitando o intervalo de repetição.
     `nota` é a regra de nota mínima (nota_feed ou nota_stories); foto abaixo dela nunca sai.
     Com group_by_day, tenta pegar fotos do mesmo dia (mesmo evento) para montagens coerentes.
@@ -229,6 +300,9 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
         rows += [r for r in db.execute(
             "select * from media where kind=? and ok=1 and score>=? order by last_used asc, (path like 'site:%') desc, score desc",
             (kind, minimo)) if r["id"] not in have]
+    if not rows:
+        return []
+    rows = _filtra_arquitetos(db, cfg, rows, n, day or date.today(), story)
     if not rows:
         return []
     if group_by_day:

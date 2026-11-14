@@ -108,25 +108,25 @@ def plan_day(db, cfg, day: date, log=print):
             when = f"{day}T{hr.get('feed', '18:30')}"
             rows, files, copy, tipo = [], [], None, ("reel" if kind == "reel" else "feed")
             if kind == "foto":
-                rows = library.pick(db, cfg, 1)
+                rows = library.pick(db, cfg, 1, day=day)
                 if rows:
                     files = [out / "feed.jpg"]
                     compose.single(rows[0], cfg).save(files[0], quality=93)
             elif kind == "montagem":
                 n = [3, 4, 2][seed % 3]
-                rows = library.pick(db, cfg, n, group_by_day=True)
+                rows = library.pick(db, cfg, n, group_by_day=True, day=day)
                 if len(rows) >= 2:
                     files = [out / "feed_montagem.jpg"]
                     compose.collage(rows, cfg, seed=seed).save(files[0], quality=93)
             elif kind == "carrossel":
-                rows = library.pick(db, cfg, 6, group_by_day=True)
+                rows = library.pick(db, cfg, 6, group_by_day=True, day=day)
                 if len(rows) >= 2:
                     for i, im in enumerate(compose.carousel(rows, cfg, seed=seed)):
                         f = out / f"carrossel_{i + 1:02d}.jpg"
                         im.save(f, quality=93)
                         files.append(f)
             elif kind == "reel":
-                vids = library.pick(db, cfg, 1, kind="video", nota="nota_stories")
+                vids = library.pick(db, cfg, 1, kind="video", nota="nota_stories", day=day)
                 if vids:
                     rows = vids
                     copy = captions.write(rows, cfg, "reel", log=log)  # legenda e título do reel saem antes do vídeo
@@ -141,9 +141,9 @@ def plan_day(db, cfg, day: date, log=print):
                         log("  vídeo curto: sai como post de foto, não como reel")
                 else:
                     # 15 fotos a 2,4 s cada, com transições de 0,4 s, dão cerca de 30 s: abaixo disso não é reel
-                    rows = library.pick(db, cfg, 15, group_by_day=True)
+                    rows = library.pick(db, cfg, 15, group_by_day=True, day=day)
                     if len(rows) < 15:
-                        rows = library.pick(db, cfg, 1)
+                        rows = library.pick(db, cfg, 1, day=day)
                         if rows:
                             files = [out / "feed.jpg"]
                             compose.single(rows[0], cfg).save(files[0], quality=93)
@@ -192,26 +192,66 @@ def plan_day(db, cfg, day: date, log=print):
             used |= {r["id"] for r in rows}
             log(f"  lembrança: foto de {rows[0]['taken_at'][:10]}")
 
-    for i in range(ag.get("stories", 0) or 0):
-        modelo = modelos_story.escolher(seed + i)  # os modelos do Canva se revezam
+    _stories(db, cfg, day, out, ag.get("stories", 0) or 0, seed, used, log)
+    db.commit()
+
+
+def _stories(db, cfg, day, out, n, seed, used, log=print, inicio=0):
+    """Monta `n` stories do dia. `inicio` dá sequência aos que já existem (horário e nome do arquivo)."""
+    times = cfg.get("horarios", {}).get("stories", ["09:00", "13:00", "20:00"])
+    for i in range(n):
+        k = inicio + i
+        modelo = modelos_story.escolher(seed + k)  # os modelos do Canva se revezam
         rows = []
         if modelo == "player":  # vídeo com as fotos da mesma obra passando em slide
-            for n in (5, 4, 3, 2):
-                rows = library.pick(db, cfg, n, group_by_day=True, exclude=used, nota="nota_stories")
-                if len(rows) >= n:
+            for q in (5, 4, 3, 2):
+                rows = library.pick(db, cfg, q, group_by_day=True, exclude=used, nota="nota_stories", story=True, day=day)
+                if len(rows) >= q:
                     break
             if len(rows) < 2:
                 modelo, rows = "galeria", []
-        rows = rows or library.pick(db, cfg, 1, exclude=used, nota="nota_stories")
+        rows = rows or library.pick(db, cfg, 1, exclude=used, nota="nota_stories", story=True, day=day)
         if not rows:
             log("  story: sem mídia nova, pulando")
             break
         copy = captions.write(rows, cfg, "story", log=log)
-        f = _render_story(modelo, rows, cfg, out / f"story_{i + 1}", copy["texto_story"])
-        _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], {**copy, "modelo": modelo})
+        sufixo = f"_r{datetime.now():%H%M%S}" if inicio else ""
+        f = _render_story(modelo, rows, cfg, out / f"story_{k + 1}{sufixo}", copy["texto_story"])
+        _save_post(db, cfg, f"{day}T{times[k % len(times)]}", "story", rows, [f], {**copy, "modelo": modelo})
         used |= {r["id"] for r in rows}
-        log(f"  story {i + 1} ({modelo}): “{copy['texto_story']}”")
+        log(f"  story {k + 1} ({modelo}): “{copy['texto_story']}”")
     db.commit()
+
+
+def repor_stories_pausados(db, cfg, log=print):
+    """Stories de arquitetos pausados que ainda não saíram saem da fila; o dia ganha outro story no lugar."""
+    pausados = [x.lower() for x in (cfg.get("arquitetos", {}) or {}).get("pausados_stories") or []]
+    if not pausados:
+        return
+    agora = datetime.now().isoformat(timespec="minutes")
+    dias = set()
+    for p in db.execute("select * from posts where type='story' and status in ('pronto','aprovado','pendente','rascunho')"
+                        " and scheduled_for>=?", (agora,)).fetchall():
+        ids = json.loads(p["media_ids"] or "[]")
+        rows = db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids).fetchall() if ids else []
+        if any(any(x in library.arquiteto_de(r) for x in pausados) for r in rows):
+            db.execute("update posts set status='descartado', error='arquiteto pausado' where id=?", (p["id"],))
+            dias.add(p["scheduled_for"][:10])
+            log(f"  story #{p['id']} de arquiteto pausado: sai da fila")
+    db.commit()
+    for d in sorted(dias):
+        day = date.fromisoformat(d)
+        ag = cfg.get("agenda", {}).get(DIAS[day.weekday()], {}) or {}
+        ativos = [p for p in db.execute("select * from posts where type='story' and status!='descartado'"
+                                        " and substr(scheduled_for,1,10)=?", (d,)).fetchall()
+                  if not json.loads(p["meta"] or "{}").get("texto_story", "").startswith("Há ")]
+        falta = (ag.get("stories", 0) or 0) - len(ativos)
+        if falta > 0:
+            used = {i for p in db.execute("select media_ids from posts where status!='descartado' and substr(scheduled_for,1,10)=?", (d,))
+                    for i in json.loads(p["media_ids"] or "[]")}
+            out = ROOT / "output" / d
+            out.mkdir(parents=True, exist_ok=True)
+            _stories(db, cfg, day, out, falta, day.toordinal(), used, log, inicio=len(ativos))
 
 
 def memories(db, day: date, exclude=(), janela=3) -> list:
@@ -380,6 +420,7 @@ def main(argv=None):
         db.execute(q, () if a.arg == "all" else (int(a.arg),))
         db.commit()
     if a.cmd in ("run", "plan"):
+        repor_stories_pausados(db, cfg)
         refazer_stories(db, cfg)
     if a.cmd in ("run", "publish"):
         publish_due(db, cfg)
