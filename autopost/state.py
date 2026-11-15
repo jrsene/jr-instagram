@@ -7,6 +7,8 @@ Cópias vindas do OneDrive e do site (data/cache/od_*, site_*) ficam de fora, po
   python -m autopost.state unpack   # antes de rodar
   python -m autopost.state pack     # depois de rodar
   python -m autopost.state key      # gera uma chave nova
+  python -m autopost.state previas-cifrar           # cifra output/previas/index.html em previas.enc
+  python -m autopost.state previas-decifrar arq.enc # gera previas.html no seu computador, para abrir
 """
 import io
 import os
@@ -18,6 +20,8 @@ from cryptography.fernet import Fernet
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE = ROOT / "state.enc"
+PREVIAS = ROOT / "output" / "previas" / "index.html"
+PREVIAS_ENC = ROOT / "previas.enc"
 
 
 def _key():
@@ -73,11 +77,30 @@ def unpack():
     print("estado restaurado")
 
 
+def previas_cifrar():
+    """A página de prévias tem fotos e legendas de posts ainda não publicados: vai cifrada, como o estado."""
+    if not PREVIAS.exists():
+        print("sem prévias para cifrar")
+        return
+    PREVIAS_ENC.write_bytes(_key().encrypt(PREVIAS.read_bytes()))
+    print(f"prévias cifradas ({PREVIAS_ENC.stat().st_size // 1024} KB)")
+
+
+def previas_decifrar(arq: str):
+    saida = ROOT / "previas.html"
+    saida.write_bytes(_key().decrypt(Path(arq).read_bytes()))
+    print(f"abra no navegador: {saida}")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "key":
         print(Fernet.generate_key().decode())
     elif cmd in ("pack", "unpack"):
         globals()[cmd]()
+    elif cmd == "previas-cifrar":
+        previas_cifrar()
+    elif cmd == "previas-decifrar" and len(sys.argv) > 2:
+        previas_decifrar(sys.argv[2])
     else:
         print(__doc__)

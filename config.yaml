@@ -2,8 +2,7 @@
 # modo: dry_run  -> gera tudo e mostra prévia, não publica nada
 #       approve  -> gera e deixa "pendente"; publica só o que você aprovar
 #       auto     -> gera e publica sozinho
-mode: dry_run
-ligar_com_chave: auto   # vazio = não publica; religado pelo Junior em 2026-10-25 ("pode religar a publicacao")
+mode: approve   # 2026-11-15: nada sai sem aprovação na prévia (aprovar: workflow autopost, campo aprovar)
 
 perfil:
   handle: "@jr.prs"              # aparece discreto nos stories
@@ -86,6 +85,11 @@ edicao:
   legenda_fala: true      # legenda animada (também na narração dos reels)
   modelo_fala: small      # tiny/base/small: maior = transcreve melhor, mais lento
 
+# Prévias: a fila de posts à frente que já está montada e esperando aprovação.
+# fila_minima conta posts de FEED (um por dia, às 18:30); stories são extra (2 a 3 por dia, 09h/13h/20h).
+previas:
+  fila_minima: 10
+
 horarios:
   feed: "18:30"
   stories: ["09:00", "13:00", "20:00"]
@@ -99,6 +103,7 @@ regras:
   nota_stories: 0.6                # 0-1, nota mínima para stories
   alternar_obras: true             # o post seguinte puxa de outra obra (álbum do site ou dia da foto)
   alternar_ultimas: 2              # obras das últimas N postagens não se repetem enquanto houver outra
+  album_prioritario: "Juana Alves"  # álbum da galeria que sai primeiro (vale enquanto tiver fotos boas)
 
 # Seus vídeos viram reel tratado: fala (legenda no tempo de cada palavra) ou, sem fala, trilha no lugar do som cru.
 video:
