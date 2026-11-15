@@ -22,10 +22,10 @@ Pega todas as suas fotos e vídeos, escolhe as melhores, monta posts, montagens,
 
 ## Prévias e aprovação
 
-- `mode: approve` (padrão agora): cada post entra na fila como **pendente** e só sai depois de aprovado. Nada é publicado sem aprovação.
+- `mode: auto`: as postagens saem sozinhas, inclusive os stories. A fila fica visível nas prévias para você ver e pedir ajustes.
 - A fila tem pelo menos `previas.fila_minima` posts de **feed** (10 por padrão, um por dia às 18:30). Os stories (2 a 3 por dia, 09h/13h/20h) entram à parte.
 - A página de prévias (`output/previas/index.html`) traz as fotos, a legenda, os créditos e o status de cada post. Ela vai cifrada na release `estado` como `previas.enc`. Para abrir no seu computador: `python -m autopost.state previas-decifrar previas.enc` (com a `STATE_KEY`).
-- Aprovar pelo GitHub: Actions → autopost → Run workflow, campo `aprovar` com os ids (`12,13`) ou `all`.
+- Aprovar (opcional, só se você quiser segurar um post): Actions → autopost → Run workflow, campo `aprovar` com os ids (`12,13`) ou `all`.
 - Pedir ajuste: campo `ajuste` do mesmo formulário (texto livre), com `post` opcional (refaz a legenda daquele post de feed). O ajuste vira regra para as próximas legendas e fica em `regras/ajustes.md`.
 - `regras.album_prioritario` põe um álbum da galeria do site na frente enquanto ele tiver fotos boas.
 

@@ -2,7 +2,7 @@
 # modo: dry_run  -> gera tudo e mostra prévia, não publica nada
 #       approve  -> gera e deixa "pendente"; publica só o que você aprovar
 #       auto     -> gera e publica sozinho
-mode: approve   # 2026-11-15: nada sai sem aprovação na prévia (aprovar: workflow autopost, campo aprovar)
+mode: auto   # 2026-11-15: postagens automáticas, inclusive stories; a fila fica visível nas prévias para ajustes
 
 perfil:
   handle: "@jr.prs"              # aparece discreto nos stories
