@@ -45,6 +45,22 @@ def escolher(db) -> list:
     return escolhidas
 
 
+def conferencia(rows, destino: Path) -> None:
+    """Folha de conferência: as fotos escolhidas em grade, com o álbum escrito embaixo de cada uma."""
+    from PIL import ImageDraw, ImageFont
+    cols, lado, rot = 3, 360, 26
+    linhas = (len(rows) + cols - 1) // cols
+    folha = Image.new("RGB", (cols * lado, linhas * (lado + rot)), (244, 239, 232))
+    fonte = ImageFont.load_default(size=18) if hasattr(ImageFont, "load_default") else ImageFont.load_default()
+    for i, r in enumerate(rows):
+        im = Image.open(library.local(r)).convert("RGB")
+        im.thumbnail((lado - 10, lado - 10))
+        x, y = (i % cols) * lado, (i // cols) * (lado + rot)
+        folha.paste(im, (x + (lado - im.width) // 2, y + (lado - im.height) // 2))
+        ImageDraw.Draw(folha).text((x + 8, y + lado + 4), str(r["album"] or "avulsa")[:40], fill=(40, 40, 40), font=fonte)
+    folha.save(destino, quality=88)
+
+
 def main(saida: str) -> int:
     out = Path(saida)
     out.mkdir(parents=True, exist_ok=True)
@@ -57,6 +73,10 @@ def main(saida: str) -> int:
     for r in rows:  # lista as fotos escolhidas, para o dono conferir antes de montar de novo
         ratio = (r["w"] or 1) / (r["h"] or 1)
         log(f"escolhida: álbum={r['album']} | arquivo={r['path']} | proporção={ratio:.2f} | piscina={piscina(r)}")
+    try:
+        conferencia(rows, out / "conferencia.jpg")
+    except Exception as e:
+        log(f"conferencia: {type(e).__name__}: {e}")
     rel = {"fotos": len(rows), "albuns": len({r['album'] for r in rows}), "ok": False}
     if len(rows) < 2:
         rel["motivo"] = "fotos insuficientes"

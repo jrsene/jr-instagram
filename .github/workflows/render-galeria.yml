@@ -4,7 +4,7 @@ name: render-galeria
 on:
   workflow_dispatch: {}
 permissions:
-  contents: read
+  contents: write
 jobs:
   galeria:
     runs-on: ubuntu-latest
@@ -24,3 +24,13 @@ jobs:
         with:
           name: reel-duas-por-album
           path: ${{ runner.temp }}/galeria
+      - name: guarda a folha de conferência no branch (só para o dono ver)
+        if: always()
+        run: |
+          test -f "$RUNNER_TEMP/galeria/conferencia.jpg" || exit 0
+          mkdir -p previas && cp "$RUNNER_TEMP/galeria/conferencia.jpg" previas/conferencia.jpg
+          git config user.name "github-actions"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add previas/conferencia.jpg
+          git commit -m "conferência das fotos do reel" || exit 0
+          git push origin HEAD:"$GITHUB_REF_NAME"
