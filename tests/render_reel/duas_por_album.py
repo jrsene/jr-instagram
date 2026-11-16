@@ -54,6 +54,9 @@ def main(saida: str) -> int:
     db = library.connect(ROOT)
     log(f"galeria: {site.sync(db, cfg, log=log)} nova(s)")
     rows = escolher(db)
+    for r in rows:  # lista as fotos escolhidas, para o dono conferir antes de montar de novo
+        ratio = (r["w"] or 1) / (r["h"] or 1)
+        log(f"escolhida: álbum={r['album']} | arquivo={r['path']} | proporção={ratio:.2f} | piscina={piscina(r)}")
     rel = {"fotos": len(rows), "albuns": len({r['album'] for r in rows}), "ok": False}
     if len(rows) < 2:
         rel["motivo"] = "fotos insuficientes"
