@@ -57,9 +57,14 @@ def main(saida: str) -> int:
     rel = {"fotos": len(rows), "albuns": len({r['album'] for r in rows}), "ok": False}
     if len(rows) < 2:
         rel["motivo"] = "fotos insuficientes"
+    elif (31.0 + 0.4 * (len(rows) - 1)) / len(rows) > 4.5:
+        rel["motivo"] = f"fotos insuficientes para 30 s com 2 por álbum ({len(rows)} fotos)"
     else:
         # 2 fotos por álbum; se forem poucas para 30 s, cada foto fica um pouco mais (sem repetir nem travar)
-        por_foto = max(2.4, 31.0 / len(rows))
+        # compose: total = por_foto*n - 0,4*(n-1) (transições). Para passar de 30 s, cada foto dura o necessário.
+        por_foto = (31.0 + 0.4 * (len(rows) - 1)) / len(rows)
+        if por_foto > 4.5:  # foto demais parada vira "slide show" lento; abaixo disso, sem reel
+            rel["motivo"] = f"fotos insuficientes para 30 s com 2 por álbum ({len(rows)} fotos)"
         destino = out / "reel_duas_por_album.mp4"
         try:
             compose.reel(rows, cfg, destino, music=TRILHA, voice=None, falado="", per=por_foto)
