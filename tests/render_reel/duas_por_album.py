@@ -1,0 +1,80 @@
+"""Teste manual: reel de fotos em transição com 2 fotos por álbum, sem publicar nada.
+
+Regra do pedido (16/11): duas fotos por álbum, as mais amplas (mais abertura). Fotos de piscina
+são de dia (as mais claras). Trilha: assets/music/comfy_fundo.mp3 (livre de direitos).
+Uso: python tests/render_reel/duas_por_album.py <pasta_de_saida>
+"""
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+import yaml  # noqa: E402
+from PIL import Image, ImageStat  # noqa: E402
+from autopost import compose, library, site  # noqa: E402
+
+TRILHA = ROOT / "assets" / "music" / "comfy_fundo.mp3"
+
+
+def luz(r) -> float:
+    im = Image.open(library.local(r)).convert("L")
+    im.thumbnail((200, 200))
+    return ImageStat.Stat(im).mean[0]
+
+
+def piscina(r) -> bool:
+    return "piscina" in f"{r['album'] or ''} {r['tags'] or ''}".lower()
+
+
+def escolher(db) -> list:
+    rows = db.execute("select * from media where kind='image' and ok=1 and score>=0.75").fetchall()
+    grupos = {}
+    for r in rows:
+        grupos.setdefault(r["album"] or "avulsas", []).append(r)
+    escolhidas = []
+    for album in sorted(grupos):
+        fotos = grupos[album]
+        if any(piscina(r) for r in fotos):
+            fotos = sorted(fotos, key=lambda r: (luz(r), (r["w"] or 1) / (r["h"] or 1)), reverse=True)
+        else:
+            fotos = sorted(fotos, key=lambda r: ((r["w"] or 1) / (r["h"] or 1), r["score"]), reverse=True)
+        escolhidas += fotos[:2]
+    return escolhidas
+
+
+def main(saida: str) -> int:
+    out = Path(saida)
+    out.mkdir(parents=True, exist_ok=True)
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text(encoding="utf-8"))
+    linhas = []
+    log = lambda m: (linhas.append(str(m)), print(m, flush=True))
+    db = library.connect(ROOT)
+    log(f"galeria: {site.sync(db, cfg, log=log)} nova(s)")
+    rows = escolher(db)
+    rel = {"fotos": len(rows), "albuns": len({r['album'] for r in rows}), "ok": False}
+    if len(rows) < 2:
+        rel["motivo"] = "fotos insuficientes"
+    else:
+        # 2 fotos por álbum; se forem poucas para 30 s, cada foto fica um pouco mais (sem repetir nem travar)
+        por_foto = max(2.4, 31.0 / len(rows))
+        destino = out / "reel_duas_por_album.mp4"
+        try:
+            compose.reel(rows, cfg, destino, music=TRILHA, voice=None, falado="", per=por_foto)
+            o = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                str(destino)], capture_output=True, text=True, check=True).stdout
+            rel["duracao_s"] = round(float(o.strip()), 2)
+            rel["por_foto_s"] = round(por_foto, 2)
+            rel["ok"] = rel["duracao_s"] >= 30 - 0.1
+        except Exception as e:
+            rel["erro"] = f"{type(e).__name__}: {e}"
+    rel["log"] = linhas[-40:]
+    (out / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({k: v for k, v in rel.items() if k != "log"}, ensure_ascii=False, indent=2))
+    return 0 if rel["ok"] else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "resultados"))
