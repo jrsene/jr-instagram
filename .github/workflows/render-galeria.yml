@@ -18,9 +18,9 @@ jobs:
       - name: dependências de produção
         run: pip install -r requirements.txt
       - name: monta o reel com fotos da galeria
-        run: python tests/render_reel/galeria.py "$RUNNER_TEMP/galeria"
+        run: python tests/render_reel/duas_por_album.py "$RUNNER_TEMP/galeria"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reel-galeria
+          name: reel-duas-por-album
           path: ${{ runner.temp }}/galeria
