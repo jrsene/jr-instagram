@@ -45,7 +45,7 @@ def escolher(db) -> list:
     return escolhidas
 
 
-def conferencia(rows, destino: Path) -> None:
+def conferencia(rows, destino: Path, rotulo=None) -> None:
     """Folha de conferência: as fotos escolhidas em grade, com o álbum escrito embaixo de cada uma."""
     from PIL import ImageDraw, ImageFont
     cols, lado, rot = 3, 360, 26
@@ -57,7 +57,7 @@ def conferencia(rows, destino: Path) -> None:
         im.thumbnail((lado - 10, lado - 10))
         x, y = (i % cols) * lado, (i // cols) * (lado + rot)
         folha.paste(im, (x + (lado - im.width) // 2, y + (lado - im.height) // 2))
-        ImageDraw.Draw(folha).text((x + 8, y + lado + 4), str(r["album"] or "avulsa")[:40], fill=(40, 40, 40), font=fonte)
+        ImageDraw.Draw(folha).text((x + 8, y + lado + 4), (rotulo(r) if rotulo else str(r["album"] or "avulsa"))[:48], fill=(40, 40, 40), font=fonte)
     folha.save(destino, quality=88)
 
 
@@ -73,6 +73,13 @@ def main(saida: str) -> int:
     for r in rows:  # lista as fotos escolhidas, para o dono conferir antes de montar de novo
         ratio = (r["w"] or 1) / (r["h"] or 1)
         log(f"escolhida: álbum={r['album']} | arquivo={r['path']} | proporção={ratio:.2f} | piscina={piscina(r)}")
+    try:  # todas as fotos do álbum da piscina, com o nome do arquivo, para escolher outro ângulo
+        piscinas = db.execute("select * from media where kind='image' and ok=1 and score>=0.75"
+                              " and lower(album) like '%piscina%' order by album, id limit 12").fetchall()
+        if piscinas:
+            conferencia(piscinas, out / "piscina.jpg", rotulo=lambda r: f"{r['album']} · {r['path'][-10:]}")
+    except Exception as e:
+        log(f"piscina: {type(e).__name__}: {e}")
     try:
         conferencia(rows, out / "conferencia.jpg")
     except Exception as e:
