@@ -30,6 +30,7 @@ jobs:
           test -f "$RUNNER_TEMP/galeria/conferencia.jpg" || exit 0
           mkdir -p previas && cp "$RUNNER_TEMP/galeria/conferencia.jpg" previas/conferencia.jpg
           test -f "$RUNNER_TEMP/galeria/piscina.jpg" && cp "$RUNNER_TEMP/galeria/piscina.jpg" previas/piscina.jpg || true
+          test -f "$RUNNER_TEMP/galeria/juana.jpg" && cp "$RUNNER_TEMP/galeria/juana.jpg" previas/juana.jpg || true
           git config user.name "github-actions"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add previas/

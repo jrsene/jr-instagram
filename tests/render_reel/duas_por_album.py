@@ -80,6 +80,13 @@ def main(saida: str) -> int:
             conferencia(piscinas, out / "piscina.jpg", rotulo=lambda r: f"{r['album']} · {r['path'][-10:]}")
     except Exception as e:
         log(f"piscina: {type(e).__name__}: {e}")
+    try:  # todas as fotos do álbum da Juana Alves, para escolher uma fachada
+        juana = db.execute("select * from media where kind='image' and ok=1 and score>=0.75"
+                           " and lower(album) like '%juana%' order by album, id limit 12").fetchall()
+        if juana:
+            conferencia(juana, out / "juana.jpg", rotulo=lambda r: f"{r['album'][-30:]} · {r['path'][-10:]}")
+    except Exception as e:
+        log(f"juana: {type(e).__name__}: {e}")
     try:
         conferencia(rows, out / "conferencia.jpg")
     except Exception as e:
