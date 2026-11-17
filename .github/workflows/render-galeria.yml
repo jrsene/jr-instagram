@@ -18,7 +18,9 @@ jobs:
       - name: dependências de produção
         run: pip install -r requirements.txt
       - name: monta o reel com fotos da galeria
-        run: python tests/render_reel/duas_por_album.py "$RUNNER_TEMP/galeria"
+        run: |
+          python tests/render_reel/duas_por_album.py "$RUNNER_TEMP/galeria"
+          python tests/render_reel/recepcao_galeria.py "$RUNNER_TEMP/recepcao"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -27,6 +29,7 @@ jobs:
       - name: guarda a folha de conferência no branch (só para o dono ver)
         if: always()
         run: |
+          mkdir -p previas && cp "$RUNNER_TEMP"/recepcao/recepcao_*.jpg previas/ 2>/dev/null || true
           test -f "$RUNNER_TEMP/galeria/conferencia.jpg" || exit 0
           mkdir -p previas && cp "$RUNNER_TEMP/galeria/conferencia.jpg" previas/conferencia.jpg
           test -f "$RUNNER_TEMP/galeria/piscina.jpg" && cp "$RUNNER_TEMP/galeria/piscina.jpg" previas/piscina.jpg || true
