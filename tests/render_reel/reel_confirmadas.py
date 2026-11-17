@@ -15,7 +15,7 @@ import yaml  # noqa: E402
 from autopost import compose, library, site  # noqa: E402
 from duas_por_album import TRILHA, conferencia, luz, piscina  # noqa: E402
 
-CONFIRMADAS = ("9tdv", "mr63lr", "au1l7")  # código final de cada foto: piscina de dia, fachada, recepção  # piscina de dia, fachada, recepção
+CONFIRMADAS = ("9tdvc", "mr63h", "au1l7")  # código final de cada foto: piscina de dia, fachada, recepção  # piscina de dia, fachada, recepção
 EXTRAS_POR_ALBUM = 3  # fotos extras por álbum confirmado (além das confirmadas)
 
 
