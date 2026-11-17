@@ -33,6 +33,8 @@ def main(saida: str) -> int:
         achou = [r for r in rows if r["path"].endswith(suf)]  # o código fica no fim do arquivo
         if not achou:
             log(f"não encontrei a foto confirmada {suf}")
+            for r in [r for r in rows if "piscina" in (r["album"] or "").lower() or "juana" in (r["album"] or "").lower()][:40]:
+                log(f"  diagnóstico: álbum={r['album']} | arquivo={r['path']} | score={r['score']}")
             continue
         escolhidas.append(achou[0])
     albuns = {r["album"] for r in escolhidas}
