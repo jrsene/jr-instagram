@@ -7,7 +7,20 @@ name: autopost
 on:
   schedule:
     - cron: "17 0,1,11-23 * * *"   # de hora em hora, 08:17 às 22:17 BRT
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:   # aprovar e pedir ajuste pelo celular, sem mexer no código
+      aprovar:
+        description: 'ids das prévias para aprovar, separados por vírgula, ou "all" (vazio = não aprova nada)'
+        required: false
+        default: ""
+      ajuste:
+        description: "pedido de ajuste (vira regra das próximas legendas)"
+        required: false
+        default: ""
+      post:
+        description: "id do post a refazer a legenda (opcional, só feed ainda não publicado)"
+        required: false
+        default: ""
 permissions:
   contents: write
 concurrency: autopost
@@ -54,12 +67,19 @@ jobs:
           key: hf-${{ github.run_id }}
           restore-keys: hf-
       - if: env.STATE_KEY != ''
+        env:
+          APROVAR: ${{ github.event.inputs.aprovar }}
+          AJUSTE: ${{ github.event.inputs.ajuste }}
+          POST: ${{ github.event.inputs.post }}
         run: |
           # estado: a release "estado" é a fonte; o state.enc antigo do git só vale enquanto ela não existir
           if gh release view estado >/dev/null 2>&1; then
             gh release download estado -p state.enc --clobber
           fi
           python -m autopost.state unpack
+          # aprovação e ajuste pedidos pelo workflow_dispatch (vazios nas rodadas automáticas)
+          if [ -n "$APROVAR" ]; then python -m autopost approve "$APROVAR" || echo "aprovação falhou"; fi
+          if [ -n "$AJUSTE" ]; then python -m autopost ajuste "$AJUSTE" ${POST:+--post "$POST"} || echo "ajuste falhou"; fi
           # narração com a sua voz: só instala o motor se houver amostra em data/voz/
           if ls data/voz/* >/dev/null 2>&1; then
             pip install -q --extra-index-url https://download.pytorch.org/whl/cpu chatterbox-tts || echo "motor de voz indisponível"
@@ -74,6 +94,8 @@ jobs:
           gh release view estado >/dev/null 2>&1 || gh release create estado --title "estado (criptografado)" \
             --notes "Estado do piloto automático, criptografado com a STATE_KEY. Não apague: sem ele o sistema esquece o que já publicou."
           gh release upload estado state.enc --clobber
+          # prévias: a página da fila vai cifrada na mesma release (abra com previas-decifrar, na sua máquina)
+          python -m autopost.state previas-cifrar && gh release upload estado previas.enc --clobber || true
       - name: avisa se a rodada falhou
         if: env.falhou == '1'
         run: exit 1

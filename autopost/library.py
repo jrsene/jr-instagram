@@ -241,6 +241,12 @@ def pick(db, cfg: dict, n: int, kind: str = "image", group_by_day: bool = False,
         if full:
             best = max(full, key=lambda g: (-min(x["used_count"] for x in g), bool(g[0]["album"]), sum(sorted((x["score"] for x in g), reverse=True)[:n])))
             return sorted(best, key=lambda r: -r["score"])[:n]
+    prio = (rules.get("album_prioritario") or "").strip().lower()
+    if prio:  # álbum escolhido pelo dono entra antes; se não houver fotos suficientes, segue a regra normal
+        escolhidas = [r for r in rows if prio in (r["album"] or "").lower()]
+        if len(escolhidas) >= n:
+            rows = escolhidas
+            evitar = set()  # o álbum escolhido pelo dono não sai de vez por causa da alternância
     if evitar:  # sem agrupar: as obras de fora da alternância vêm primeiro
         rows = [r for r in rows if chave_obra(r) not in evitar] + [r for r in rows if chave_obra(r) in evitar]
     return rows[:n]

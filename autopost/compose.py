@@ -294,6 +294,8 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         cmd = ["ffmpeg", "-y", "-v", "error", *inputs]
         n = len(clips)
         if music:
+            if not voice:  # trilha curta repete até o fim do reel (sem -shortest, que cortava o vídeo na música)
+                cmd += ["-stream_loop", "-1"]
             cmd += ["-i", str(music)]
         if voice:
             cmd += ["-i", str(voice)]
@@ -325,7 +327,7 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         if audio:
             cmd += ["-map", audio, "-c:a", "aac"]
         elif music:
-            cmd += ["-map", f"{n}:a", "-af", fade, "-c:a", "aac", "-shortest"]
+            cmd += ["-map", f"{n}:a", "-af", fade, "-c:a", "aac"]
         cmd += ["-t", f"{total:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
         subprocess.run(cmd, check=True)
     return out

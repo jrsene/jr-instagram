@@ -7,6 +7,8 @@ Uso:
   python -m autopost publish          # publica o que está pronto e com horário vencido
   python -m autopost approve <id|all> # (modo approve) libera posts para publicação
   python -m autopost preview          # gera output/preview.html
+  python -m autopost previas          # gera a página de prévias (fila inteira, com fotos e legendas)
+  python -m autopost ajuste "texto" [--post 12]   # grava um pedido de ajuste como regra das próximas legendas
   python -m autopost onedrive-login   # conecta o OneDrive (uma vez só)
 """
 import argparse
@@ -18,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from . import captions, compose, curate, drive, library, modelos_story, onedrive, site, voz
+from . import captions, compose, curate, drive, library, modelos_story, onedrive, previas, site, voz
 
 ROOT = Path(__file__).resolve().parent.parent
 DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"]
@@ -56,6 +58,18 @@ def _render_story(modelo: str, rows, cfg, base: Path, texto: str) -> Path:
     f = base.with_suffix(".jpg")
     im.save(f, quality=92)
     return f
+
+
+def garantir_fila(db, cfg, log=print):
+    """Planeja dia a dia até haver `previas.fila_minima` posts de feed na fila (um por dia, às 18:30)."""
+    minimo = (cfg.get("previas") or {}).get("fila_minima", 10)
+    dia = date.today()
+    for _ in range(120):
+        if previas.feed_na_fila(db) >= minimo:
+            return
+        plan_day(db, cfg, dia, log=log)
+        dia += timedelta(days=1)
+    log(f"fila: não chegou a {minimo} posts de feed em 120 dias")
 
 
 def refazer_stories(db, cfg, log=print):
@@ -328,17 +342,45 @@ def refazer_perfil(db, cfg):
     print(f"perfil mudou: {n} foto(s) voltam para a curadoria e {p} post(s) futuro(s) serão refeitos")
 
 
+def registrar_ajuste_cmd(db, cfg, texto, post_id=None, log=print):
+    """Grava o ajuste como regra e, se apontar um post de feed ainda não publicado, refaz a legenda dele."""
+    previas.registrar_ajuste(db, texto, post_id)
+    cfg["_ajustes"] = previas.regras_texto(db)
+    log(f"ajuste gravado: {texto}")
+    if not post_id:
+        return
+    p = db.execute("select * from posts where id=?", (post_id,)).fetchone()
+    if not p or p["status"] not in ("rascunho", "pendente", "pronto", "aprovado") or p["type"] != "feed":
+        log(f"post #{post_id}: a legenda não é refeita (só feed ainda não publicado); a regra vale a partir da próxima")
+        return
+    meta = json.loads(p["meta"] or "{}")
+    ids = json.loads(p["media_ids"] or "[]")
+    rows = db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids).fetchall() if ids else []
+    if not rows:
+        return
+    novo = captions.write(rows, cfg, "feed", log=log)
+    novo.pop("narracao", None)
+    meta = {**meta, **novo}
+    db.execute("update posts set caption=?, meta=? where id=?",
+               (captions.full_caption(meta), json.dumps(meta, ensure_ascii=False), post_id))
+    db.commit()
+    log(f"post #{post_id}: legenda refeita com o ajuste")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="autopost")
-    ap.add_argument("cmd", choices=["run", "ingest", "plan", "publish", "approve", "preview", "onedrive-login"])
+    ap.add_argument("cmd", choices=["run", "ingest", "plan", "publish", "approve", "preview", "previas", "ajuste",
+                                    "onedrive-login"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("--dias", type=int, default=1)
     ap.add_argument("--data")
+    ap.add_argument("--post", type=int)
     a = ap.parse_args(argv)
     if a.cmd == "onedrive-login":
         return onedrive.login()
     cfg = load_cfg()
     db = library.connect(ROOT)
+    cfg["_ajustes"] = previas.regras_texto(db)  # pedidos de ajuste viram regra nas legendas novas
     # a rodada é de hora em hora; buscar e avaliar fotos novas (que custa IA) só a cada `ingestao_horas`
     marca = ROOT / "data" / ".ultima_ingestao"
     ingerir = a.cmd == "ingest" or not marca.exists() or \
@@ -375,16 +417,25 @@ def main(argv=None):
         start = date.fromisoformat(a.data) if a.data else date.today()
         for i in range(a.dias):
             plan_day(db, cfg, start + timedelta(days=i))
-    if a.cmd == "approve":
-        q = "update posts set status='aprovado' where status='pendente'" + ("" if a.arg == "all" else " and id=?")
-        db.execute(q, () if a.arg == "all" else (int(a.arg),))
+    if a.cmd == "approve":  # "all" ou ids separados por vírgula; só mexe no que está pendente
+        if a.arg == "all":
+            db.execute("update posts set status='aprovado' where status='pendente'")
+        else:
+            ids = [int(x) for x in (a.arg or "").replace(" ", "").split(",") if x]
+            db.executemany("update posts set status='aprovado' where status='pendente' and id=?", [(i,) for i in ids])
         db.commit()
+        print(f"aprovado: {a.arg}")
+    if a.cmd == "ajuste":
+        registrar_ajuste_cmd(db, cfg, a.arg, a.post)
     if a.cmd in ("run", "plan"):
+        garantir_fila(db, cfg)
         refazer_stories(db, cfg)
     if a.cmd in ("run", "publish"):
         publish_due(db, cfg)
     if a.cmd in ("run", "plan", "preview"):
         print("prévia:", preview(db))
+    if a.cmd in ("run", "previas"):
+        print("prévias:", previas.pagina(db, cfg))
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ name: render-galeria
 on:
   workflow_dispatch: {}
 permissions:
-  contents: read
+  contents: write
 jobs:
   galeria:
     runs-on: ubuntu-latest
@@ -18,9 +18,24 @@ jobs:
       - name: dependências de produção
         run: pip install -r requirements.txt
       - name: monta o reel com fotos da galeria
-        run: python tests/render_reel/galeria.py "$RUNNER_TEMP/galeria"
+        run: |
+          python tests/render_reel/reel_confirmadas.py "$RUNNER_TEMP/confirmadas"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reel-galeria
+          name: reel-duas-por-album
           path: ${{ runner.temp }}/galeria
+      - name: guarda a folha de conferência no branch (só para o dono ver)
+        if: always()
+        run: |
+          mkdir -p previas && cp "$RUNNER_TEMP"/confirmadas/folha_confirmadas.jpg previas/ 2>/dev/null || true
+          cp "$RUNNER_TEMP"/confirmadas/reel_confirmadas.mp4 previas/ 2>/dev/null || true
+
+          test -f "$RUNNER_TEMP/galeria/piscina.jpg" && cp "$RUNNER_TEMP/galeria/piscina.jpg" previas/piscina.jpg || true
+          test -f "$RUNNER_TEMP/galeria/juana.jpg" && cp "$RUNNER_TEMP/galeria/juana.jpg" previas/juana.jpg || true
+          git config user.name "github-actions"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add previas/
+          git commit -m "conferência das fotos do reel" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"

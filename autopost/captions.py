@@ -74,6 +74,8 @@ def write(rows, cfg, formato: str, log=print) -> dict:
                 f"Tom de voz: {perfil.get('voz', '')}\n"
                 f"Formato do post: {formato}. As imagens acima vão juntas nesse post.\n"
                 + _contexto(rows) +
+                (f"Ajustes que o dono pediu (siga em todo texto, sem citar que foi pedido):\n{cfg.get('_ajustes', '')}\n"
+                 if cfg.get("_ajustes") else "") +
                 "Escreva a legenda como um profissional de arquitetura escreveria: blocos curtos, frase-tese simples, "
                 "depois o que foi feito, com material, luz ou uso do espaço. Nada de adjetivo vazio, emoji, pergunta "
                 "para engajar, frase de efeito, 'não é X, é Y' ou travessão. "
