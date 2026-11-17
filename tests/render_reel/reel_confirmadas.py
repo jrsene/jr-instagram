@@ -15,7 +15,7 @@ import yaml  # noqa: E402
 from autopost import compose, library, site  # noqa: E402
 from duas_por_album import TRILHA, conferencia, luz, piscina  # noqa: E402
 
-CONFIRMADAS = ("0-25-9tdv", "8-21-mr63lr", "4-14-au1l7")  # piscina de dia, fachada, recepção
+CONFIRMADAS = ("9tdv", "mr63lr", "au1l7")  # código final de cada foto: piscina de dia, fachada, recepção  # piscina de dia, fachada, recepção
 EXTRAS_POR_ALBUM = 3  # fotos extras por álbum confirmado (além das confirmadas)
 
 
@@ -30,7 +30,7 @@ def main(saida: str) -> int:
     rows = db.execute("select * from media where kind='image' and ok=1 and score>=0.6 order by album, id").fetchall()
     escolhidas = []
     for suf in CONFIRMADAS:
-        achou = [r for r in rows if r["path"].endswith(suf)]
+        achou = [r for r in rows if r["path"].endswith(suf)]  # o código fica no fim do arquivo
         if not achou:
             log(f"não encontrei a foto confirmada {suf}")
             continue
