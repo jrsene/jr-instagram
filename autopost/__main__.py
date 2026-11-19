@@ -175,11 +175,15 @@ def plan_day(db, cfg, day: date, log=print):
             music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
             copy = captions.write(rows, cfg, "resumo da semana (reel com os melhores momentos dos últimos 7 dias)", log=log)
             vo = voz.falar(copy.get("narracao", ""), cfg, out / "narracao_resumo.wav", log=log)
-            files = [compose.reel(rows, cfg, out / "resumo_semana.mp4",
-                                  music=music[seed % len(music)] if music else None, voice=vo,
-                                  falado=copy.get("narracao", "") if vo else "")]
-            _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, files, copy)
-            log(f"  resumo da semana: {len(rows)} fotos")
+            reel_resumo = compose.reel(rows, cfg, out / "resumo_semana.mp4",
+                                       music=music[seed % len(music)] if music else None, voice=vo,
+                                       falado=copy.get("narracao", "") if vo else "")
+            if reel_resumo:  # sem 30 s de conteúdo (poucas fotos), o resumo não sai
+                files = [reel_resumo]
+                _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, files, copy)
+                log(f"  resumo da semana: {len(rows)} fotos")
+            else:
+                log(f"  resumo da semana: {len(rows)} fotos não chegam a 30 s; não sai")
 
     times = hr.get("stories", ["09:00", "13:00", "20:00"])
     if ex.get("lembranca") == DIAS[day.weekday()]:

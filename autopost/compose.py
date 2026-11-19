@@ -13,6 +13,16 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance
 FEED = (1080, 1350)   # 4:5, o formato que mais ocupa a tela no feed
 STORY = (1080, 1920)  # 9:16
 
+# Edição: um único tratamento de cor para todo vídeo da série (tons quentes, sombras levantadas, menos saturação:
+# o look de revista de arquitetura). Mesma cadeia em fotos animadas e vídeos, para o feed ter uma cara só.
+GRADE_VIDEO = ("eq=contrast=1.04:saturation=0.97:gamma=1.02,"
+               "colorbalance=rs=-0.03:gs=-0.01:bs=0.02:rm=-0.02:bm=0.01:rh=0.02:bh=-0.02")
+# Áudio em -16 LUFS (padrão de celular), pico limitado: a voz e a trilha ficam no mesmo volume de um reel para o outro.
+LOUDNORM = "loudnorm=I=-16:TP=-1.5:LRA=11"
+REEL_POR_FOTO = 2.6   # s por foto (ritmo mais calmo, de revista)
+REEL_TRANSICAO = 0.6  # s de dissolve entre fotos
+REEL_MIN_S = 30       # reel só sai com esse conteúdo (regra do projeto)
+
 
 def _hex(c: str):
     c = c.lstrip("#")
@@ -260,28 +270,32 @@ def carousel(rows, cfg, seed=None) -> list[Image.Image]:
     return slides[:10]
 
 
-def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path | None = None,
+def reel(rows, cfg, out: Path, music: Path | None = None, per=REEL_POR_FOTO, voice: Path | None = None,
          falado: str = "") -> Path:
     """Reel 9:16 a partir de fotos: zoom suave (Ken Burns) com transições.
     Com voice (narração), a música abaixa enquanto a voz fala e o texto falado aparece como legenda."""
     W, H = STORY
     fps = 30
     frames = int(per * fps)
+    xf = REEL_TRANSICAO
+    if per * len(rows) - xf * (len(rows) - 1) < REEL_MIN_S:  # poucas fotos: sem conteúdo para 30 s, não sai reel
+        return None
     with tempfile.TemporaryDirectory() as td:
         clips = []
         for i, r in enumerate(rows):
             src = Path(td) / f"s{i}.jpg"
-            smart_fit(_polish(_load(r)), (int(W * 1.25), int(H * 1.25))).save(src, quality=92)
-            zin = i % 2 == 0
-            z = f"'min(1+0.0018*on,1.2)'" if zin else f"'max(1.2-0.0018*on,1)'"
+            # pré-ampliado 1,6x: o zoom anda em subpixels e não treme
+            smart_fit(_polish(_load(r)), (int(W * 1.6), int(H * 1.6))).save(src, quality=92)
+            # movimento suave: entra ou sai devagar (ease in-out), alternando de foto em foto
+            ease = f"(1-cos(PI*on/{frames}))/2"
+            z = f"'1+0.10*{ease}'" if i % 2 == 0 else f"'1.10-0.10*{ease}'"
             clip = Path(td) / f"c{i}.mp4"
             subprocess.run([
                 "ffmpeg", "-y", "-v", "error", "-loop", "1", "-i", str(src), "-t", str(per),
-                "-vf", f"zoompan=z={z}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={fps},format=yuv420p",
+                "-vf", f"zoompan=z={z}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={fps},{GRADE_VIDEO},format=yuv420p",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", str(clip)], check=True)
             clips.append(clip)
         # junta com transição de 0.4s
-        xf = 0.4
         inputs, filt, last, offset = [], [], "[0:v]", 0.0
         for c in clips:
             inputs += ["-i", str(c)]
@@ -291,6 +305,9 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
             filt.append(f"{last}[{i}:v]xfade=transition=fade:duration={xf}:offset={offset:.2f}{tag}")
             last = tag
         total = per * len(clips) - xf * (len(clips) - 1)
+        # entra do fundo e sai com um dissolve suave no fim
+        filt.append(f"{last}fade=t=in:st=0:d=0.6,fade=t=out:st={total - 0.8:.2f}:d=0.8[vf]")
+        last = "[vf]"
         cmd = ["ffmpeg", "-y", "-v", "error", *inputs]
         n = len(clips)
         if music:
@@ -304,13 +321,13 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         if music and voice:
             # voz entra 0,5 s depois; música fica baixinha por baixo
             filt.append(f"[{n}:a]volume=0.22,atrim=0:{total:.2f}[m];[{n + 1}:a]adelay=500|500,volume=1.6[vo];"
-                        f"[m][vo]amix=inputs=2:duration=first:normalize=0,{fade}[a]")
+                        f"[m][vo]amix=inputs=2:duration=first:normalize=0,{fade},{LOUDNORM}[a]")
             audio = "[a]"
         elif voice:
-            filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade}[a]")
+            filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade},{LOUDNORM}[a]")
             audio = "[a]"
         elif not music:
-            filt.append(f"[{n}:a]lowpass=f=1200,volume=0.8,afade=t=in:d=1,{fade}[a]")
+            filt.append(f"[{n}:a]lowpass=f=1200,volume=0.8,afade=t=in:d=1,{fade},{LOUDNORM}[a]")
             audio = "[a]"
         if voice and falado and cfg.get("edicao", {}).get("legenda_fala", True):
             from . import edicao
@@ -325,7 +342,7 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         if audio:
             cmd += ["-map", audio, "-c:a", "aac"]
         elif music:
-            cmd += ["-map", f"{n}:a", "-af", fade, "-c:a", "aac", "-shortest"]
+            cmd += ["-map", f"{n}:a", "-af", f"{fade},{LOUDNORM}", "-c:a", "aac", "-shortest"]
         cmd += ["-t", f"{total:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
         subprocess.run(cmd, check=True)
     return out
@@ -444,7 +461,7 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
         segs = [f"[0:v]setpts={F:.4f}*PTS" + (f",tpad=stop_mode=clone:stop_duration={pad:.2f}" if pad > 0.05 else "")
                 + ",split[a][b]",
                 f"[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg]",
-                f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease,eq=contrast=1.05:saturation=1.1[fg]",
+                f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease,{GRADE_VIDEO}[fg]",
                 f"[bg][fg]overlay=(W-w)/2:(H-h)/2,fade=t=in:st=0:d=0.5,fade=t=out:st={T - 0.7:.2f}:d=0.7[v0]",
                 "[v0][1:v]overlay=0:0[v1]"]
         if falado and ec.get("legenda_fala", True):
@@ -456,9 +473,9 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
             segs += [f"[0:a]apad,atrim=0:{T:.2f},highpass=f=120,lowpass=f=8000,afftdn=nf=-30,volume=1.2[va]",
                      f"{trilha_f}[m]",
                      f"[va][m]amix=inputs=2:duration=first:normalize=0,afade=t=in:d=0.5,"
-                     f"afade=t=out:st={T - 1.2:.2f}:d=1.2[ao]"]
+                     f"afade=t=out:st={T - 1.2:.2f}:d=1.2,{LOUDNORM}[ao]"]
         else:
-            segs += [f"{trilha_f}[m]", f"[m]afade=t=in:d=0.5,afade=t=out:st={T - 1.2:.2f}:d=1.2[ao]"]
+            segs += [f"{trilha_f}[m]", f"[m]afade=t=in:d=0.5,afade=t=out:st={T - 1.2:.2f}:d=1.2,{LOUDNORM}[ao]"]
         cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(base), "-loop", "1", "-i", str(png), *trilha_in,
                "-filter_complex", ";".join(segs), "-map", "[vo]", "-map", "[ao]", "-t", f"{T:.2f}",
                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
