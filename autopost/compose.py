@@ -380,17 +380,39 @@ def _overlay_video(texto: str | None, creditos: dict | None, cfg: dict, falado: 
     return im
 
 
-def _trilha(cfg, seed: int, T: float, volume: float):
+def _trilha(cfg, seed: int, T: float, volume: float, idx: int = 2):
     """Trilha para o reel: uma música de assets/music (em loop) ou, se a pasta estiver vazia,
-    um fundo sintético suave (dois tons graves e suaves, sem pulsos). Devolve (entradas do ffmpeg, filtro até [2:a])."""
+    um fundo sintético suave (dois tons graves e suaves, sem pulsos). Devolve (entradas do ffmpeg, filtro até [idx:a]).
+    idx é a posição da trilha entre as entradas do ffmpeg (2 no reel de vídeo, 1 nos stories)."""
     pasta = library.ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")
     mp3 = sorted(pasta.glob("*.mp3")) if pasta.exists() else []
     if mp3:
         return (["-stream_loop", "-1", "-i", str(mp3[seed % len(mp3)])],
-                f"[2:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
+                f"[{idx}:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
     return (["-f", "lavfi", "-i", f"aevalsrc=0.13*sin(2*PI*220*t)+0.09*sin(2*PI*330*t):s=44100:d={T:.2f}"],
-                      
-            f"[2:a]lowpass=f=1200,volume={volume}")
+            f"[{idx}:a]lowpass=f=1200,volume={volume}")
+
+
+def story_video(img: Image.Image, out: Path, cfg, seed: int = 0, seconds: float = 15.0) -> Path:
+    """Story de foto → vídeo 9:16 com a mesma trilha sem direito autoral dos reels.
+    Story de imagem não aceita som pela API, então a arte parada vira um clipe de alguns segundos com áudio."""
+    T = float(seconds)
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        png = Path(td) / "still.jpg"
+        img.convert("RGB").save(png, quality=95)
+        trilha_in, trilha_f = _trilha(cfg, seed, T, volume=0.9, idx=1)
+        cmd = ["ffmpeg", "-y", "-v", "error", "-loop", "1", "-framerate", "24", "-i", str(png), *trilha_in,
+               "-filter_complex", f"{trilha_f},afade=t=in:d=0.6,afade=t=out:st={T - 1.0:.2f}:d=1[ao]",
+               "-map", "0:v", "-map", "[ao]",
+               "-vf", f"fade=t=in:st=0:d=0.6,fade=t=out:st={T - 0.8:.2f}:d=0.8,format=yuv420p",
+               "-t", f"{T:.2f}", "-r", "24", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+               "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out)]
+        subprocess.run(cmd, check=True)
+    if not out.exists():
+        raise RuntimeError("ffmpeg não gerou o story em vídeo")
+    return out
 
 
 def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None = None,
