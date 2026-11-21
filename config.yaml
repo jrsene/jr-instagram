@@ -100,6 +100,13 @@ regras:
   alternar_obras: true             # o post seguinte puxa de outra obra (álbum do site ou dia da foto)
   alternar_ultimas: 2              # obras das últimas N postagens não se repetem enquanto houver outra
 
+# Arquitetos: um por dia (diferente do dia anterior). Pausados não saem em story.
+# limite_semanal: no máximo N postagens de feed por semana deste arquiteto.
+arquitetos:
+  pausados_stories: ["Poliana Carlesso"]
+  limite_semanal:
+    "Poliana Carlesso": 1
+
 # Seus vídeos viram reel tratado: fala (legenda no tempo de cada palavra) ou, sem fala, trilha no lugar do som cru.
 video:
   duracao_min: 8                   # segundos; vídeo mais curto ganha câmera lenta leve e quadro parado no fim
