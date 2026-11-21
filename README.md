@@ -13,7 +13,7 @@ Pega todas as suas fotos e vídeos, escolhe as melhores, monta posts, montagens,
    - feed em 4:5 (1080×1350) com recorte inteligente, que procura onde está o assunto em vez de cortar sempre no centro;
    - montagens com 2 a 6 fotos em vários layouts, com a melhor foto na célula maior;
    - carrossel com capa em montagem e as fotos depois;
-   - story 9:16 com fundo desfocado, cantos arredondados, sombra e frase curta;
+   - story 9:16 com fundo desfocado, cantos arredondados, sombra e frase curta. Story de imagem não leva som pela API, então sai como vídeo curto (15 s) com a mesma trilha sem direito autoral dos reels;
    - reel feito de fotos (zoom suave, transições e música opcional de `assets/music/`) ou a partir dos seus vídeos;
    - **vídeo tratado** (`compose.video_reel`, precisa de `ffmpeg`): com fala, corta as pausas, limpa o chiado, legenda cada palavra e põe a trilha por baixo; sem fala, o som cru da obra (máquina, ambiente) sai e entra a trilha. Vídeo curto ganha câmera lenta leve (até 1,6x) e quadro parado no fim para chegar a `video.duracao_min` (8 s). Sempre entram tratamento de cor, fade e um título gráfico com o selo JR;
    - trilha: uma música de `assets/music/*.mp3` (escolhida por vídeo, em loop). Sem mp3 nessa pasta, entra um fundo sintético suave, gerado pelo próprio ffmpeg. Para trilhas de verdade, coloque mp3 livres de direitos nessa pasta.
