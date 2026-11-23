@@ -111,7 +111,7 @@ visual:
   espaco: 14                       # espaço entre fotos (px)
   cantos: 28                       # arredondamento nos stories
   fonte: "/usr/share/fonts/opentype/inter/Inter-Bold.otf"
-  musica_pasta: assets/music       # mp3 para os reels e vídeos (sem mp3, entra um fundo sintético suave)
+  musica_pasta: assets/music       # mp3 de música calma (opcional); sem mp3, entra a trilha calma gerada. Sem trilha válida, reel não sai
 
 ia:
   legendas: true                   # usa Claude (precisa ANTHROPIC_API_KEY)

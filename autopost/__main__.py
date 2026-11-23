@@ -150,12 +150,11 @@ def plan_day(db, cfg, day: date, log=print):
                             tipo = "feed"
                             log("  fotos insuficientes para 30 s: sai como post de foto, não como reel")
                     if len(rows) >= 15:
-                        music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
-                        mus = music[seed % len(music)] if music else None
                         copy = captions.write(rows, cfg, kind, log=log)
                         vo = voz.falar(copy.get("narracao", ""), cfg, out / "narracao.wav", log=log)
-                        files = [compose.reel(rows, cfg, out / "reel.mp4", music=mus, voice=vo,
-                                              falado=copy.get("narracao", "") if vo else "")]
+                        reel_ = compose.reel(rows, cfg, out / "reel.mp4", voice=vo,
+                                             falado=copy.get("narracao", "") if vo else "")
+                        files = [reel_] if reel_ else []  # sem trilha válida, o reel não sai
                         if vo:
                             log(f"  narração: “{copy['narracao']}”")
             if files:
@@ -172,14 +171,15 @@ def plan_day(db, cfg, day: date, log=print):
     if ex.get("resumo_semana") == DIAS[day.weekday()] and not kind:
         rows = week_media(db, day, nota=cfg.get("regras", {}).get("nota_feed", 0.75))
         if len(rows) >= 4:
-            music = sorted((ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")).glob("*.mp3"))
             copy = captions.write(rows, cfg, "resumo da semana (reel com os melhores momentos dos últimos 7 dias)", log=log)
             vo = voz.falar(copy.get("narracao", ""), cfg, out / "narracao_resumo.wav", log=log)
-            files = [compose.reel(rows, cfg, out / "resumo_semana.mp4",
-                                  music=music[seed % len(music)] if music else None, voice=vo,
-                                  falado=copy.get("narracao", "") if vo else "")]
-            _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, files, copy)
-            log(f"  resumo da semana: {len(rows)} fotos")
+            reel_ = compose.reel(rows, cfg, out / "resumo_semana.mp4", voice=vo,
+                                 falado=copy.get("narracao", "") if vo else "")
+            if reel_:  # sem trilha válida, o resumo não sai
+                _save_post(db, cfg, f"{day}T{hr.get('feed', '18:30')}", "reel", rows, [reel_], copy)
+                log(f"  resumo da semana: {len(rows)} fotos")
+            else:
+                log("  resumo da semana: sem trilha válida, não sai")
 
     times = hr.get("stories", ["09:00", "13:00", "20:00"])
     if ex.get("lembranca") == DIAS[day.weekday()]:

@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-from . import edicao, library
+from . import edicao, library, trilha
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageEnhance
 
 FEED = (1080, 1350)   # 4:5, o formato que mais ocupa a tela no feed
@@ -260,13 +260,16 @@ def carousel(rows, cfg, seed=None) -> list[Image.Image]:
     return slides[:10]
 
 
-def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path | None = None,
-         falado: str = "") -> Path:
+def reel(rows, cfg, out: Path, per=2.4, voice: Path | None = None,
+         falado: str = "") -> Path | None:
     """Reel 9:16 a partir de fotos: zoom suave (Ken Burns) com transições.
     Com voice (narração), a música abaixa enquanto a voz fala e o texto falado aparece como legenda."""
     W, H = STORY
     fps = 30
     frames = int(per * fps)
+    faixa = trilha.escolher(cfg)
+    if faixa is None:  # sem música de verdade, o reel não sai (nunca com som sintético ou ruído)
+        return None
     with tempfile.TemporaryDirectory() as td:
         clips = []
         for i, r in enumerate(rows):
@@ -293,25 +296,17 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
         total = per * len(clips) - xf * (len(clips) - 1)
         cmd = ["ffmpeg", "-y", "-v", "error", *inputs]
         n = len(clips)
-        if music:
-            cmd += ["-i", str(music)]
+        cmd += ["-stream_loop", "-1", "-i", str(faixa)]
         if voice:
             cmd += ["-i", str(voice)]
-        if not music and not voice:  # sem música na pasta: fundo sintético, para o reel não sair mudo
-            cmd += ["-f", "lavfi", "-i", f"aevalsrc=0.13*sin(2*PI*220*t)+0.09*sin(2*PI*330*t):s=44100:d={total:.2f}"]
         fade = f"afade=t=out:st={total - 1:.2f}:d=1"
-        audio = None
-        if music and voice:
+        if voice:
             # voz entra 0,5 s depois; música fica baixinha por baixo
             filt.append(f"[{n}:a]volume=0.22,atrim=0:{total:.2f}[m];[{n + 1}:a]adelay=500|500,volume=1.6[vo];"
                         f"[m][vo]amix=inputs=2:duration=first:normalize=0,{fade}[a]")
-            audio = "[a]"
-        elif voice:
-            filt.append(f"[{n}:a]adelay=500|500,apad,atrim=0:{total:.2f},{fade}[a]")
-            audio = "[a]"
-        elif not music:
-            filt.append(f"[{n}:a]lowpass=f=1200,volume=0.8,afade=t=in:d=1,{fade}[a]")
-            audio = "[a]"
+        else:
+            filt.append(f"[{n}:a]volume=0.9,atrim=0:{total:.2f},afade=t=in:d=0.5,{fade}[a]")
+        audio = "[a]"
         if voice and falado and cfg.get("edicao", {}).get("legenda_fala", True):
             from . import edicao
             ass = edicao.legenda_ass(edicao.palavras_no_tempo(falado, 0.5, edicao.duracao(voice)),
@@ -322,10 +317,7 @@ def reel(rows, cfg, out: Path, music: Path | None = None, per=2.4, voice: Path |
             cmd += ["-filter_complex", ";".join(filt), "-map", last]
         else:
             cmd += ["-map", "0:v"]
-        if audio:
-            cmd += ["-map", audio, "-c:a", "aac"]
-        elif music:
-            cmd += ["-map", f"{n}:a", "-af", fade, "-c:a", "aac", "-shortest"]
+        cmd += ["-map", audio, "-c:a", "aac"]
         cmd += ["-t", f"{total:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out)]
         subprocess.run(cmd, check=True)
     return out
@@ -380,17 +372,10 @@ def _overlay_video(texto: str | None, creditos: dict | None, cfg: dict, falado: 
     return im
 
 
-def _trilha(cfg, seed: int, T: float, volume: float):
-    """Trilha para o reel: uma música de assets/music (em loop) ou, se a pasta estiver vazia,
-    um fundo sintético suave (dois tons graves e suaves, sem pulsos). Devolve (entradas do ffmpeg, filtro até [2:a])."""
-    pasta = library.ROOT / cfg.get("visual", {}).get("musica_pasta", "assets/music")
-    mp3 = sorted(pasta.glob("*.mp3")) if pasta.exists() else []
-    if mp3:
-        return (["-stream_loop", "-1", "-i", str(mp3[seed % len(mp3)])],
-                f"[2:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
-    return (["-f", "lavfi", "-i", f"aevalsrc=0.13*sin(2*PI*220*t)+0.09*sin(2*PI*330*t):s=44100:d={T:.2f}"],
-                      
-            f"[2:a]lowpass=f=1200,volume={volume}")
+def _trilha(faixa: Path, T: float, volume: float):
+    """Entrada e filtro da trilha (em loop) para o reel de vídeo."""
+    return (["-stream_loop", "-1", "-i", str(faixa)],
+            f"[2:a]atrim=0:{T:.2f},afade=t=in:d=1,volume={volume}")
 
 
 def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None = None,
@@ -406,7 +391,6 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
     max_s = vc.get("duracao_max", max_s)
     min_s = float(vc.get("duracao_min", 8))
     src = library.local(row, video=True)
-    seed = int(hashlib.sha1(str(row["id"]).encode()).hexdigest()[:8], 16)
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "base.mp4"
         falado, novo = False, []
@@ -434,12 +418,16 @@ def video_reel(row, out: Path, max_s=30, cfg=None, log=print, texto: str | None 
         if T < float(vc.get("duracao_reel", 30)):  # reel pequeno não sai: sem conteúdo para 30 s
             log(f"  só {T:.1f} s de conteúdo; reel precisa de {vc.get('duracao_reel', 30)} s: não sai")
             return None
+        faixa = trilha.escolher(cfg, log=log)
+        if faixa is None:  # sem música de verdade, o reel não sai
+            log("  sem trilha válida: reel não sai")
+            return None
         pad = round(T - L * F, 2)
         log(f"  reel: {T:.1f}s ({'com fala' if falado else 'sem fala, com trilha'})")
 
         png = Path(td) / "sobreposicao.png"
         _overlay_video(texto, creditos, cfg, falado).save(png)
-        trilha_in, trilha_f = _trilha(cfg, seed, T, volume=0.22 if falado else 0.9)
+        trilha_in, trilha_f = _trilha(faixa, T, volume=0.22 if falado else 0.9)
 
         segs = [f"[0:v]setpts={F:.4f}*PTS" + (f",tpad=stop_mode=clone:stop_duration={pad:.2f}" if pad > 0.05 else "")
                 + ",split[a][b]",
