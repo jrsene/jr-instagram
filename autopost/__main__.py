@@ -46,16 +46,18 @@ def _save_post(db, cfg, when, ptype, rows, files, copy):
     library.mark_used(db, [r["id"] for r in rows])
 
 
-def _render_story(modelo: str, rows, cfg, base: Path, texto: str) -> Path:
-    """Monta o story no modelo pedido; devolve o arquivo (jpg, ou mp4 no modelo player)."""
+def _render_story(modelo: str, rows, cfg, base: Path, texto: str, seed: int = 0) -> Path:
+    """Monta o story no modelo pedido. Devolve sempre um mp4 com trilha sem direito autoral:
+    story de imagem não leva som pela API, então a arte parada vira um clipe com áudio (compose.story_video)."""
+    if modelo == "lembranca":  # story de "há N anos": sem créditos de site, como sempre foi
+        return compose.story_video(compose.story(rows, cfg, text=texto, selo="Lembrança"),
+                                   base.with_suffix(".mp4"), cfg, seed=seed)
     cred = site.creditos(rows)
     if modelo == "player":
-        return modelos_story.player(rows, cfg, base.with_suffix(".mp4"), text=texto, creditos=cred)
+        return modelos_story.player(rows, cfg, base.with_suffix(".mp4"), text=texto, creditos=cred, seed=seed)
     fn = {"galeria": modelos_story.galeria, "editorial": modelos_story.editorial}.get(modelo)
     im = fn(rows, cfg, text=texto, creditos=cred) if fn else compose.story(rows, cfg, text=texto, creditos=cred)
-    f = base.with_suffix(".jpg")
-    im.save(f, quality=92)
-    return f
+    return compose.story_video(im, base.with_suffix(".mp4"), cfg, seed=seed)
 
 
 def refazer_stories(db, cfg, log=print):
@@ -65,20 +67,26 @@ def refazer_stories(db, cfg, log=print):
                         " and scheduled_for>=? order by scheduled_for", (agora,)).fetchall():
         meta = json.loads(p["meta"] or "{}")
         texto = meta.get("texto_story") or ""
-        if meta.get("modelo") or texto.startswith("Há "):
+        antigos = json.loads(p["files"] or "[]")
+        if antigos and str(antigos[0]).endswith(".mp4"):  # já sai com trilha
             continue
         ids = json.loads(p["media_ids"] or "[]")
         rows = [r for r in db.execute(f"select * from media where id in ({','.join('?' * len(ids))})", ids)] if ids else []
         if not rows:
             continue
-        # título antigo da IA ("…: reforma completa entregue") dá lugar ao nome do projeto
-        texto = ((site.creditos(rows).get("albuns") or [{}])[0].get("album") or texto)
-        modelo = modelos_story.escolher(p["id"])
-        if modelo == "player" and len(rows) < 2:
-            modelo = ["galeria", "editorial"][p["id"] % 2]
+        lembranca = texto.startswith("Há ")
+        if lembranca:
+            modelo = "lembranca"
+        else:
+            # título antigo da IA ("…: reforma completa entregue") dá lugar ao nome do projeto
+            texto = ((site.creditos(rows).get("albuns") or [{}])[0].get("album") or texto)
+            modelo = meta.get("modelo") or modelos_story.escolher(p["id"])  # mantém o modelo já aprovado
+            if modelo == "player" and len(rows) < 2:
+                modelo = ["galeria", "editorial"][p["id"] % 2]
         try:
-            antigo = Path(json.loads(p["files"])[0])
-            f = _render_story(modelo, rows, cfg, antigo.with_name(antigo.stem + "_v2"), texto)
+            antigo = Path(antigos[0]) if antigos else ROOT / "output" / f"story_{p['id']}"
+            antigo.parent.mkdir(parents=True, exist_ok=True)
+            f = _render_story(modelo, rows, cfg, antigo.with_name(antigo.stem + "_v2"), texto, seed=p["id"])
         except Exception as e:
             log(f"  story #{p['id']}: não deu para refazer ({type(e).__name__}: {str(e)[:120]})")
             continue
@@ -186,8 +194,7 @@ def plan_day(db, cfg, day: date, log=print):
         rows = memories(db, day, exclude=used)
         if rows:
             anos = day.year - int(rows[0]["taken_at"][:4])
-            f = out / "story_lembranca.jpg"
-            compose.story(rows, cfg, text=f"Há {anos} ano{'s' if anos > 1 else ''}…", selo="Lembrança").save(f, quality=92)
+            f = _render_story("lembranca", rows, cfg, out / "story_lembranca", f"Há {anos} ano{'s' if anos > 1 else ''}…", seed=seed)
             _save_post(db, cfg, f"{day}T{times[-1]}", "story", rows, [f], {"texto_story": f"Há {anos} anos", "legenda": "", "hashtags": [], "alt_text": ""})
             used |= {r["id"] for r in rows}
             log(f"  lembrança: foto de {rows[0]['taken_at'][:10]}")
@@ -207,7 +214,7 @@ def plan_day(db, cfg, day: date, log=print):
             log("  story: sem mídia nova, pulando")
             break
         copy = captions.write(rows, cfg, "story", log=log)
-        f = _render_story(modelo, rows, cfg, out / f"story_{i + 1}", copy["texto_story"])
+        f = _render_story(modelo, rows, cfg, out / f"story_{i + 1}", copy["texto_story"], seed=seed + i)
         _save_post(db, cfg, f"{day}T{times[i % len(times)]}", "story", rows, [f], {**copy, "modelo": modelo})
         used |= {r["id"] for r in rows}
         log(f"  story {i + 1} ({modelo}): “{copy['texto_story']}”")

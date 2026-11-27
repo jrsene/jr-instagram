@@ -258,8 +258,9 @@ def _barra(canvas: Image.Image, cfg, t: float, total: float):
 
 
 def player(rows, cfg, dest: Path, text: str | None = None, creditos: dict | None = None,
-           por_foto: float = 3.0, fade: float = 0.6) -> Path:
-    """Story em vídeo: as fotos passam em slide (fusão suave e zoom lento) e a barra cresce até o fim."""
+           por_foto: float = 3.0, fade: float = 0.6, seed: int = 0) -> Path:
+    """Story em vídeo: as fotos passam em slide (fusão suave e zoom lento) e a barra cresce até o fim.
+    Leva a mesma trilha sem direito autoral dos reels (compose._trilha)."""
     c = creditos or {}
     cw, ch = CARTAO[2] - CARTAO[0], CARTAO[3] - CARTAO[1]
     fotos = [compose._polish(compose.smart_fit(compose._load(r), (round(cw * 1.08), round(ch * 1.08)))) for r in rows[:5]]
@@ -267,10 +268,13 @@ def player(rows, cfg, dest: Path, text: str | None = None, creditos: dict | None
     n = round(total * FPS)
     painel = _painel(cfg, text, c)
     dest = Path(dest)
+    trilha_in, trilha_f = compose._trilha(cfg, seed, total, volume=0.9, idx=1)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
-           "-r", str(FPS), "-i", "-", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-           "-shortest", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
-           "-c:a", "aac", "-b:a", "64k", "-movflags", "+faststart", str(dest)]
+           "-r", str(FPS), "-i", "-", *trilha_in,
+           "-filter_complex", f"{trilha_f},afade=t=in:d=0.6,afade=t=out:st={total - 1.0:.2f}:d=1[ao]",
+           "-map", "0:v", "-map", "[ao]", "-t", f"{total:.2f}",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
+           "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(dest)]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     try:
         for k in range(n):
